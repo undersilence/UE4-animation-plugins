@@ -25,7 +25,7 @@ public class AnimCurveExport : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "AssetRegistry", "SkeletonEditor",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -34,7 +34,6 @@ public class AnimCurveExport : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				
 				"Projects",
 				"InputCore",
 				"UnrealEd",
@@ -45,7 +44,12 @@ public class AnimCurveExport : ModuleRules
 				"SlateCore",
 				"PropertyEditor",
 				"ContentBrowser",
-				"AnimationModifiers"
+				"AnimationModifiers",
+				"AssetTools",
+				"SkeletonEditor",
+				"AnimationEditor",
+				"EditorStyle",
+				"CurveEditor",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
