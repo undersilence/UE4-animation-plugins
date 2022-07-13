@@ -169,12 +169,11 @@ bool FAnimSequenceToolkitsModule::GetBoneKeysByNameHelper(
 		return false;
 	}
 	// In BoneSpace, need Convert to ComponentSpace
-	OutPosKey.Init(FVector::ZeroVector, Seq->GetNumberOfFrames());
-	OutRotKey.Init(FQuat::Identity, Seq->GetNumberOfFrames());
+	auto NbrOfFrames = Seq->GetNumberOfFrames();
+	OutPosKey.Init(FVector::ZeroVector, NbrOfFrames);
+	OutRotKey.Init(FQuat::Identity, NbrOfFrames);
 	auto BoneInfos = RefSkeleton.GetRefBoneInfo();
-	auto AnimTrackNames = Seq->GetAnimationTrackNames();
 
-	auto AnimTracks = Seq->GetRawAnimationData();
 	TArray<FName> BoneTraces;
 	do
 	{
@@ -197,12 +196,12 @@ bool FAnimSequenceToolkitsModule::GetBoneKeysByNameHelper(
 		OutRotKey[i] = FinalTransform.GetRotation();
 	}
 
-	/* NOT USED ANYMORE
+	/* NOT USE ANYMORE
 	do
 	{
 		auto _BoneName = RefSkeleton.GetBoneName(BoneIndex);
 		UE_LOG(LogTemp, Log, TEXT("Current Bone Hierarchy %d, %s"), BoneIndex, *_BoneName.ToString());
-		
+
 		auto TrackIndex = AnimTrackNames.IndexOfByKey(_BoneName); // Correspond BoneIndex in AnimTracks, Find by Unique Name
 		auto Track = Seq->GetRawAnimationTrack(TrackIndex);
 		auto CurrPosKey = Track.PosKeys;
@@ -236,8 +235,7 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 	GetBoneKeysByNameHelper(Seq, KeyBone, PosKeys, RotKeys, true);
 
 	// Total Nums of the Key
-	// Strategy: Capture the local Z minimal point in World_Transform_Curve of
-	// LeftHand
+	// Strategy: Capture the local Z minimal point in LeftHand
 	const auto N = PosKeys.Num();
 	const auto M = RotKeys.Num();
 	const auto FrameCount = Seq->GetNumberOfFrames();
@@ -255,9 +253,10 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 		FVector CurrPos = PosKeys[x];
 		FVector CurrRot = RotKeys[y].Euler();
 
+		// Coordinates Transform
 		Swap(CurrPos.Y, CurrPos.Z);
 		CurrPos.Z = -CurrPos.Z;
-		
+
 		x += PosIncrement;
 		y += RotIncrement;
 
@@ -267,7 +266,7 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 		RotAvg += CurrRot;
 
 		PosXCurve.FloatCurve.UpdateOrAddKey(Time, CurrPos.X);
-		PosZCurve.FloatCurve.UpdateOrAddKey(Time, CurrPos.Z); // ?
+		PosZCurve.FloatCurve.UpdateOrAddKey(Time, CurrPos.Z);
 		RotYCurve.FloatCurve.UpdateOrAddKey(Time, CurrRot.Y, true);
 	}
 
@@ -280,7 +279,7 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 	FVector PrevRot, NextRot, CurrRot;
 
 	TArray<float> LocalMinimals;
-	TArray<int32> MinKeys;
+	TArray<int32> MinimalKeys;
 	TArray<int32> Permutations;
 
 	for (int i = 0; i < FrameCount; ++i)
@@ -292,7 +291,7 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 		if (CurrPos.Z <= PrevPos.Z && CurrPos.Z <= NextPos.Z)
 		{
 			Permutations.Add(LocalMinimals.Num());
-			MinKeys.Add(i);
+			MinimalKeys.Add(i);
 			LocalMinimals.Add(CurrPos.Z);
 		}
 
@@ -309,7 +308,7 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 			// 1 means right, -1 means left
 			auto LegType = Pos0.X > Pos1.X ? 1 : -1;
 
-			
+
 			FootstepsCurve.UpdateOrAddKey(Pos0.X > Pos1.X ? 1 : -1, Time0);
 
 			// if (Pos0.X > Pos1.X)
@@ -326,17 +325,20 @@ void FAnimSequenceToolkitsModule::MarkFootstepsFor1PAnimation(
 		*/
 	}
 
-	Permutations.Sort([&](int i, int j) { return LocalMinimals[i] < LocalMinimals[j]; });
+	Permutations.Sort([&](int i, int j)
+	{
+		return LocalMinimals[i] < LocalMinimals[j];
+	});
 
 	if (LocalMinimals.Num() >= 2)
 	{
 		auto I = Permutations[0], II = Permutations[1];
-		FootstepsCurve.UpdateOrAddKey(LocalMinimals[I], Seq->GetTimeAtFrame(MinKeys[I]));
-		FootstepsCurve.UpdateOrAddKey(LocalMinimals[II], Seq->GetTimeAtFrame(MinKeys[II]));
+		FootstepsCurve.UpdateOrAddKey(LocalMinimals[I], Seq->GetTimeAtFrame(MinimalKeys[I]));
+		FootstepsCurve.UpdateOrAddKey(LocalMinimals[II], Seq->GetTimeAtFrame(MinimalKeys[II]));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Log, TEXT("%s: Footsteps Mark Algorithm might failed when LeftHand.Z Curve has less than 2 local minimals"), *Seq->GetName());
+		UE_LOG(LogTemp, Log, TEXT("%s: Footsteps Mark Algorithm failed when LeftHand.Z Curve has less than 2 local minimals"), *Seq->GetName());
 	}
 
 	for (auto It = FootstepsCurve.FloatCurve.GetKeyHandleIterator(); It; ++It)
@@ -370,8 +372,7 @@ bool FAnimSequenceToolkitsModule::SetVariableCurveHelper(
 		Seq->RawCurveData.AddCurveData(NewTrackName);
 		Seq->MarkRawDataAsModified();
 	}
-	auto Curve = static_cast<FFloatCurve*>(
-		Seq->RawCurveData.GetCurveData(NewTrackName.UID));
+	auto Curve = static_cast<FFloatCurve*>(Seq->RawCurveData.GetCurveData(NewTrackName.UID));
 	Curve->FloatCurve = InFloatCurve.FloatCurve;
 	return true;
 }
@@ -384,13 +385,11 @@ bool FAnimSequenceToolkitsModule::SaveBonesCurves(UAnimSequence* AnimSequence, F
 	const auto PackagePath = SavePath + "/" + AnimName;
 	// Initialize Bone Packages
 	const auto CurveNamePrefix = AnimName + "_" + BoneName;
-	auto TranslationCurve =
-		CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Translation");
-	auto RotationCurve =
-		CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Rotation");
+	auto PosCurve = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Translation");
+	auto RotCurve = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Rotation");
 
-	Packages.Add(TranslationCurve->GetOutermost());
-	Packages.Add(RotationCurve->GetOutermost());
+	Packages.Add(PosCurve->GetOutermost());
+	Packages.Add(RotCurve->GetOutermost());
 
 	TArray<FVector> PosKeys;
 	TArray<FQuat> RotKeys;
@@ -402,19 +401,13 @@ bool FAnimSequenceToolkitsModule::SaveBonesCurves(UAnimSequence* AnimSequence, F
 		const auto Translation = PosKeys[i];
 		const auto EulerAngle = RotKeys[i].Euler();
 
-		TranslationCurve->FloatCurves[0].UpdateOrAddKey(Time,
-			Translation.X);
-		TranslationCurve->FloatCurves[1].UpdateOrAddKey(Time,
-			Translation.Y);
-		TranslationCurve->FloatCurves[2].UpdateOrAddKey(Time,
-			Translation.Z);
+		PosCurve->FloatCurves[0].UpdateOrAddKey(Time, Translation.X);
+		PosCurve->FloatCurves[1].UpdateOrAddKey(Time, Translation.Y);
+		PosCurve->FloatCurves[2].UpdateOrAddKey(Time, Translation.Z);
 
-		RotationCurve->FloatCurves[0].UpdateOrAddKey(Time, EulerAngle.X,
-			true);
-		RotationCurve->FloatCurves[1].UpdateOrAddKey(Time, EulerAngle.Y,
-			true);
-		RotationCurve->FloatCurves[2].UpdateOrAddKey(Time, EulerAngle.Z,
-			true);
+		RotCurve->FloatCurves[0].UpdateOrAddKey(Time, EulerAngle.X, true);
+		RotCurve->FloatCurves[1].UpdateOrAddKey(Time, EulerAngle.Y, true);
+		RotCurve->FloatCurves[2].UpdateOrAddKey(Time, EulerAngle.Z, true);
 	}
 	// MarkFootstepsFor1PAnimation(AnimSequence);
 	// Save Packages
@@ -423,9 +416,7 @@ bool FAnimSequenceToolkitsModule::SaveBonesCurves(UAnimSequence* AnimSequence, F
 
 TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructSequenceBrowser()
 {
-	FContentBrowserModule& ContentBrowserModule =
-		FModuleManager::Get().LoadModuleChecked<FContentBrowserModule>(
-			TEXT("ContentBrowser"));
+	FContentBrowserModule& ContentBrowserModule = FModuleManager::Get().LoadModuleChecked<FContentBrowserModule>(TEXT("ContentBrowser"));
 
 	// Configure filter for asset picker
 	FARFilter Filter;
@@ -455,24 +446,28 @@ TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructSequenceBrowser()
 TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructBonePickerWidget()
 {
 	return SNew(SBorder)
-	       [SAssignNew(BonePickerWidget, SVerticalBox) +
-	        SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Center)
-	        [SNew(STextBlock)
-						.Text(FText::FromString("Target Bone Name"))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))] +
-	        SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Center).Padding(5, 0, 0, 0)
-	        [SNew(SEditableTextBox)
-						.MinDesiredWidth(50)
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
-						.Text_Lambda([this]()
-	                               {
-		                               return TargetBoneText;
-	                               })
-						.OnTextCommitted_Lambda(
-		                               [this](const FText& InText, ETextCommit::Type CommitInfo)
-		                               {
-			                               TargetBoneText = InText;
-		                               })]];
+	       [
+		       SAssignNew(BonePickerWidget, SVerticalBox)
+		       + SVerticalBox::Slot()
+		         .AutoHeight()
+		         .VAlign(VAlign_Center)
+		       [
+			       SNew(STextBlock)
+			       .Text(FText::FromString("Target Bone Name"))
+			       .Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+		       ]
+		       + SVerticalBox::Slot()
+		         .AutoHeight()
+		         .VAlign(VAlign_Center)
+		         .Padding(5, 0, 0, 0)
+		       [
+			       SNew(SEditableTextBox)
+			       .MinDesiredWidth(50)
+			       .Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+			       .Text_Lambda([this]() -> FText { return TargetBoneText; })
+			       .OnTextCommitted_Lambda([this](const FText& InText, ETextCommit::Type CommitInfo) { TargetBoneText = InText; })
+		       ]
+	       ];
 }
 
 // TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructBoneTreeList()
@@ -496,151 +491,190 @@ FAnimSequenceToolkitsModule::ConstructAnimSequenceListWidget()
 		const TSharedRef<STableViewBase>& Owner) -> TSharedRef<ITableRow>
 	{
 		return SNew(STableRow<UAnimSequence*>, Owner)
-		       .Padding(FMargin(
-			       16, 4, 16,
-			       4))[SNew(STextBlock).Text(FText::FromString(InSeq->GetName()))];
+		       .Padding(FMargin(16, 4, 16, 4))
+		       [
+			       SNew(STextBlock)
+			       .Text(FText::FromString(InSeq->GetName()))
+		       ];
 	};
 
 	auto ScrollBar = SNew(SScrollBar);
-	auto HeaderRowWidget = SNew(SHeaderRow)
-	                       + SHeaderRow::Column(
-		                       "Current AnimSequence Selections")
-	                       .FillWidth(0.80f)
-	                       [SNew(STextBlock)
-							.Text(FText::FromString("Selected AnimSequences"))
-							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))];
+	auto HeaderRowWidget =
+		SNew(SHeaderRow)
+		+ SHeaderRow::Column("Current AnimSequence Selections")
+		.FillWidth(0.80f)
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString("Selected AnimSequences"))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+		];
 
-	return SNew(SBorder).BorderImage(
-		       FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
-	       [SNew(SVerticalBox)
-	        + SVerticalBox::Slot().FillHeight(1.0f)
-	        [SNew(SBorder)
-	         .BorderImage(FEditorStyle::GetBrush("MessageLog.ListBorder"))
-	         [SNew(SScrollBox)
-	          + SScrollBox::Slot()
-	          [SAssignNew(SequencesListView, SListView<UAnimSequence*>)
-				.ItemHeight(40)
-				.ListItemsSource(&AnimSequences)
-				.OnGenerateRow_Lambda(MakeAnimSequenceTableRow)
-				.HeaderRow(HeaderRowWidget)]]]
-	        //      + SVerticalBox::Slot()
-	        //      .AutoHeight()
-	        //      [
-	        //       SNew(STextBlock)
-	        // .Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
-	        // .Text_Lambda([this]()
-	        //                       {
-	        //                        return FText::FromString(
-	        //                         AnimSequences.Num() == 0
-	        // 	                        ? "Empty"
-	        // 	                        : "");
-	        //                       })
-	        //      ]
-	        + SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Bottom)
-	        [
-		        SNew(SButton)
-		        .HAlign(HAlign_Center)
-				.Text(FText::FromString("Add from Browser"))
-				.OnClicked_Raw(this,
-			                     &FAnimSequenceToolkitsModule::OnSequencesAdd)] +
-	        SVerticalBox::Slot()
-	        .AutoHeight()
-	        .VAlign(VAlign_Bottom)
-	        [SNew(SButton)
-	        	.HAlign(HAlign_Center)
-				.Text(FText::FromString("Remove Selected"))
-				.OnClicked_Raw(
-		                      this, &FAnimSequenceToolkitsModule::OnSequencesClear)]];
+	return SNew(SBorder)
+	       .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+	       [
+		       SNew(SVerticalBox)
+		       + SVerticalBox::Slot()
+		       .FillHeight(1.0f)
+		       [
+			       SNew(SBorder)
+			       .BorderImage(FEditorStyle::GetBrush("MessageLog.ListBorder"))
+			       [
+				       SNew(SScrollBox)
+				       + SScrollBox::Slot()
+				       [
+					       SAssignNew(SequencesListView, SListView<UAnimSequence*>)
+					       .ItemHeight(40)
+					       .ListItemsSource(&AnimSequences)
+					       .OnGenerateRow_Lambda(MakeAnimSequenceTableRow)
+					       .HeaderRow(HeaderRowWidget)
+				       ]
+			       ]
+		       ]
+		       + SVerticalBox::Slot()
+		         .AutoHeight()
+		         .VAlign(VAlign_Bottom)
+		       [
+			       SNew(SButton)
+			       .HAlign(HAlign_Center)
+			       .Text(FText::FromString("Add from Browser"))
+			       .OnClicked_Raw(this, &FAnimSequenceToolkitsModule::OnSequencesAdd)
+		       ]
+		       + SVerticalBox::Slot()
+		         .AutoHeight()
+		         .VAlign(VAlign_Bottom)
+		       [
+			       SNew(SButton)
+			       .HAlign(HAlign_Center)
+			       .Text(FText::FromString("Remove Selected"))
+			       .OnClicked_Raw(this, &FAnimSequenceToolkitsModule::OnSequencesClear)
+		       ]
+	       ];
 }
 
 TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructPathPickerWidget()
 {
 	auto MakePathPickerWidget = [&, this]()
 	{
-		const auto& ContentBrowserModule =
-			FModuleManager::LoadModuleChecked<
-				FContentBrowserModule>("ContentBrowser");
+		const auto& ContentBrowserModule = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
 		FPathPickerConfig PathPickerConfig;
-		PathPickerConfig.OnPathSelected =
-			FOnPathSelected::CreateLambda(
-				[this](const FString& NewPath)
-				{
-					ExportPath = NewPath;
-				});
+		PathPickerConfig.OnPathSelected = FOnPathSelected::CreateLambda([this](const FString& NewPath) { ExportPath = NewPath; });
 		PathPickerConfig.DefaultPath = "/Game";
-		return ContentBrowserModule.Get().CreatePathPicker(
-			PathPickerConfig);
+		return ContentBrowserModule.Get().CreatePathPicker(PathPickerConfig);
 	};
 
-	return SNew(SBorder)[SAssignNew(PathPickerWidget, SVerticalBox)
-	                     + SVerticalBox::Slot().AutoHeight()
-	                     [SNew(STextBlock)
-					 .Text(FText::FromString("Output Path"))
-					 .Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))]
-	                     + SVerticalBox::Slot().AutoHeight()
-	                     [SNew(SComboButton)
-					 .OnGetMenuContent_Lambda(MakePathPickerWidget)
-					 .ButtonContent()[SNew(STextBlock).Text_Lambda([this]()
-	                     {
-		                     return FText::FromString(ExportPath);
-	                     })]]];
+	return SNew(SBorder)
+	       [
+		       SAssignNew(PathPickerWidget, SVerticalBox)
+		       + SVerticalBox::Slot()
+		       .AutoHeight()
+		       [
+			       SNew(STextBlock)
+			       .Text(FText::FromString("Output Path"))
+			       .Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+		       ]
+		       + SVerticalBox::Slot()
+		       .AutoHeight()
+		       [
+			       SNew(SComboButton)
+			       .OnGetMenuContent_Lambda(MakePathPickerWidget)
+			       .ButtonContent()
+			       [
+				       SNew(STextBlock)
+				       .Text_Lambda([this]() { return FText::FromString(ExportPath); })
+			       ]
+		       ]
+	       ];
 	// return PathPickerWidget.ToSharedRef();
 }
 
 TSharedRef<SWidget>
 FAnimSequenceToolkitsModule::ConstructCurveExtractorWidget()
 {
-	return SNew(SVerticalBox) +
-	       SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Top)
-	       [SNew(STextBlock)
-					   .Text(FText::FromString("Animation Curve Extractor"))
-					   .Font(FCoreStyle::GetDefaultFontStyle("Regular", 20))] +
-	       SVerticalBox::Slot()[ConstructAnimSequenceListWidget()]
-	       // + SVerticalBox::Slot().AutoHeight()[
-	       // 	AnimPicker
-	       // ]
-	       + SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Bottom)[ConstructBonePickerWidget()]
-	       + SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Bottom)[ConstructPathPickerWidget()]
-	       + SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Bottom)[SNew(SButton)
-								 .HAlign(HAlign_Center)
-								 .Text(FText::FromString("Export Curve"))
-								 .OnClicked_Lambda([this]()
-	                                                                              {
-		                                                                              for (auto Seq : AnimSequences)
-		                                                                              {
-			                                                                              SaveBonesCurves(Seq, TargetBoneText.ToString(), ExportPath);
-		                                                                              }
-		                                                                              return FReply::Handled();
-	                                                                              })]
-	       + SVerticalBox::Slot().AutoHeight().VAlign(VAlign_Bottom)
-	       [SNew(SButton).HAlign(HAlign_Center)
-	                     .Text(FText::FromString("Set Footsteps"))
-	                     .OnClicked_Lambda([this]()
-	                     {
-		                     for (auto Seq : AnimSequences)
-		                     {
-			                     // HARDCODE: set LeftHand as Pivot
-			                     MarkFootstepsFor1PAnimation(Seq, "LeftHand");
-		                     }
-		                     return FReply::Handled();
-	                     })];
+	return SNew(SVerticalBox)
+	       + SVerticalBox::Slot()
+	         .AutoHeight()
+	         .VAlign(VAlign_Top)
+	       [
+		       SNew(STextBlock)
+		       .Text(FText::FromString("Animation Curve Extractor"))
+		       .Font(FCoreStyle::GetDefaultFontStyle("Regular", 20))
+	       ]
+	       + SVerticalBox::Slot()
+	       [
+		       ConstructAnimSequenceListWidget()
+	       ]
+	       + SVerticalBox::Slot()
+	         .AutoHeight()
+	         .VAlign(VAlign_Bottom)
+	       [
+		       ConstructBonePickerWidget()
+	       ]
+	       + SVerticalBox::Slot()
+	         .AutoHeight()
+	         .VAlign(VAlign_Bottom)
+	       [
+		       ConstructPathPickerWidget()
+	       ]
+	       + SVerticalBox::Slot()
+	         .AutoHeight()
+	         .VAlign(VAlign_Bottom)
+	       [
+		       SNew(SButton)
+				.HAlign(HAlign_Center)
+				.Text(FText::FromString("Export Curve"))
+				.OnClicked_Lambda([this]()
+		                    {
+			                    for (auto Seq : AnimSequences)
+			                    {
+				                    SaveBonesCurves(Seq, TargetBoneText.ToString(), ExportPath);
+			                    }
+			                    return FReply::Handled();
+		                    })
+	       ]
+	       + SVerticalBox::Slot()
+	         .AutoHeight()
+	         .VAlign(VAlign_Bottom)
+	       [
+		       SNew(SButton)
+		       .HAlign(HAlign_Center)
+		       .Text(FText::FromString("Set Footsteps"))
+		       .OnClicked_Lambda([this]()
+		       {
+			       for (auto Seq : AnimSequences)
+			       {
+				       // HARDCODE: set LeftHand as Pivot
+				       MarkFootstepsFor1PAnimation(Seq, "LeftHand");
+			       }
+			       return FReply::Handled();
+		       })
+	       ];
 }
 
 TSharedRef<SDockTab> FAnimSequenceToolkitsModule::OnSpawnPluginTab(
 	const FSpawnTabArgs& SpawnTabArgs)
 {
-	return SNew(SDockTab).TabRole(ETabRole::NomadTab)
-	       [SNew(SBorder)
-	        [SNew(SHorizontalBox) +
-	         SHorizontalBox::Slot()
-	         .FillWidth(1)
-	         .Padding(2, 0, 2, 0)[ConstructCurveExtractorWidget()] +
-	         SHorizontalBox::Slot()
-	         .FillWidth(2)[ConstructSequenceBrowser()]
-		        // ] + SHorizontalBox::Slot().AutoWidth()[
-		        // 	ConstructBoneTreeList()
-		        // ]
-	        ]];
+	return SNew(SDockTab)
+	       .TabRole(ETabRole::NomadTab)
+	       [
+		       SNew(SBorder)
+		       [
+			       SNew(SHorizontalBox)
+			       + SHorizontalBox::Slot()
+			         .FillWidth(1)
+			         .Padding(2, 0, 2, 0)
+			       [
+				       ConstructCurveExtractorWidget()
+			       ]
+			       + SHorizontalBox::Slot()
+			       .FillWidth(2)
+			       [
+				       ConstructSequenceBrowser()
+			       ]
+			       // ] + SHorizontalBox::Slot().AutoWidth()[
+			       // 	ConstructBoneTreeList()
+			       // ]
+		       ]
+	       ];
 }
 
 FReply FAnimSequenceToolkitsModule::OnSequencesAdd()

@@ -71,11 +71,9 @@ private:
 	static bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const FString& SavePath);
 
 	TSharedRef<SWidget> ConstructBonePickerWidget();
-	TSharedRef<SWidget> ConstructBoneTreeList();
 	TSharedRef<SWidget> ConstructCurveExtractorWidget();
 	TSharedRef<SWidget> ConstructMarkFootstepWidget();
 	TSharedRef<SWidget> ConstructSequenceBrowser();
-	TSharedRef<SWidget> ConstructAnimationPicker();
 	TSharedRef<SWidget> ConstructAnimSequenceListWidget();
 	TSharedRef<SWidget> ConstructPathPickerWidget();
 
