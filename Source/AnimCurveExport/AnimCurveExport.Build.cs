@@ -50,6 +50,8 @@ public class AnimCurveExport : ModuleRules
 				"AnimationEditor",
 				"EditorStyle",
 				"CurveEditor",
+				"Json", 
+				"JsonUtilities" 
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
