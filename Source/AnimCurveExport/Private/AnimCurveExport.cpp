@@ -3,40 +3,26 @@
 #include "AnimCurveExport.h"
 #include "AnimCurveExportCommands.h"
 #include "AnimCurveExportStyle.h"
-#include "AnimationBlueprintLibrary.h"
-#include "AnimationEditorUtils.h"
 #include "AnimationRuntime.h"
-#include "AssetRegistryModule.h"
 
 #include "ContentBrowserModule.h"
 #include "IContentBrowserSingleton.h"
-
-#include "AssetData.h"
-#include "FileHelpers.h"
 #include "ISkeletonEditorModule.h"
 #include "PersonaModule.h"
 
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "LevelEditor.h"
-#include "PackageTools.h"
-#include "PropertyCustomizationHelpers.h"
-#include "Widgets/Docking/SDockTab.h"
-#include "Widgets/Input/SButton.h"
-#include "Widgets/Input/SEditableTextBox.h"
-#include "Widgets/Text/STextBlock.h"
-
-#include "Animation/AnimNodeBase.h"
-#include "Curves/CurveVector.h"
 #include "Kismet2/BlueprintEditorUtils.h"
-#include "UI/AnimSequenceToolWidget.h"
-#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Docking/SDockTab.h"
+
+#include "UI/AnimCurveToolWidget.h"
 
 static const FName AnimCurveExportTabName("AnimSequenceToolkits");
-bool FAnimSequenceToolkitsModule::bInDebug = true;
+bool FAnimCurveToolModule::bInDebug = true;
 
 #define LOCTEXT_NAMESPACE "FAnimSequenceToolkitsModule"
 
-void FAnimSequenceToolkitsModule::StartupModule()
+void FAnimCurveToolModule::StartupModule()
 {
 	// This code will execute after your module is loaded into memory; the exact
 	// timing is specified in the .uplugin file per-module
@@ -51,7 +37,7 @@ void FAnimSequenceToolkitsModule::StartupModule()
 	PluginCommands->MapAction(
 		FAnimCurveExportCommands::Get().OpenPluginWindow,
 		FExecuteAction::CreateRaw(
-			this, &FAnimSequenceToolkitsModule::PluginButtonClicked),
+			this, &FAnimCurveToolModule::PluginButtonClicked),
 		FCanExecuteAction());
 
 	FLevelEditorModule& LevelEditorModule =
@@ -62,7 +48,7 @@ void FAnimSequenceToolkitsModule::StartupModule()
 		MenuExtender->AddMenuExtension(
 			"WindowLayout", EExtensionHook::After, PluginCommands,
 			FMenuExtensionDelegate::CreateRaw(
-				this, &FAnimSequenceToolkitsModule::AddMenuExtension));
+				this, &FAnimCurveToolModule::AddMenuExtension));
 	
 		LevelEditorModule.GetMenuExtensibilityManager()->AddExtender(MenuExtender);
 	}
@@ -82,12 +68,12 @@ void FAnimSequenceToolkitsModule::StartupModule()
 		->RegisterNomadTabSpawner(
 			AnimCurveExportTabName,
 			FOnSpawnTab::CreateRaw(
-				this, &FAnimSequenceToolkitsModule::OnSpawnPluginTab))
+				this, &FAnimCurveToolModule::OnSpawnPluginTab))
 		.SetDisplayName(LOCTEXT("FAnimCurveExportTabTitle", "AnimCurveExport"))
 		.SetMenuType(ETabSpawnerMenuType::Hidden);
 }
 
-void FAnimSequenceToolkitsModule::ShutdownModule()
+void FAnimCurveToolModule::ShutdownModule()
 {
 	// This function may be called during shutdown to clean up your module.  For
 	// modules that support dynamic reloading, we call this function before
@@ -99,7 +85,40 @@ void FAnimSequenceToolkitsModule::ShutdownModule()
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(AnimCurveExportTabName);
 }
 
-/* DEPRECATED
+
+TSharedRef<SDockTab> FAnimCurveToolModule::OnSpawnPluginTab(
+	const FSpawnTabArgs& SpawnTabArgs)
+{
+	return SNew(SDockTab)
+		   .TabRole(ETabRole::NomadTab)
+		   [
+
+				SNew(SAnimCurveToolWidget)
+				/*
+			   SNew(SBorder)
+			   [
+				   SNew(SHorizontalBox)
+				   + SHorizontalBox::Slot()
+				     .FillWidth(1)
+				     .Padding(2, 0, 2, 0)
+				   [
+					   ConstructCurveExtractorWidget()
+				   ]
+				   + SHorizontalBox::Slot()
+				   .FillWidth(2)
+				   [
+					   ConstructSequenceBrowser()
+				   ]
+				   // ] + SHorizontalBox::Slot().AutoWidth()[
+				   // 	ConstructBoneTreeList()
+				   // ]
+			   ]*/
+		   ];
+}
+
+/*
+ * DEPRECATED, Old frameworks
+ * 
 TSharedRef<SWidget> FAnimSequenceToolkitsModule::ConstructAnimationPicker()
 {
 	TArray<const UClass*> ClassFilters;
@@ -122,8 +141,8 @@ Cast<UAnimSequence>(InAssetData.GetAsset());
 	);
 	return AnimSequencePicker;
 }
-*/
 
+/*
 // void FAnimSequenceToolkitsModule::OnAnimSequenceSelected(
 // 	const FAssetData& SelectedAsset)
 // {
@@ -369,35 +388,6 @@ Cast<UAnimSequence>(InAssetData.GetAsset());
 // 	       ];
 // }
 
-TSharedRef<SDockTab> FAnimSequenceToolkitsModule::OnSpawnPluginTab(
-	const FSpawnTabArgs& SpawnTabArgs)
-{
-	return SNew(SDockTab)
-	       .TabRole(ETabRole::NomadTab)
-	       [
-
-				SNew(SAnimSequenceToolWidget)
-		       // SNew(SBorder)
-		       // [
-			      //  SNew(SHorizontalBox)
-			      //  + SHorizontalBox::Slot()
-			      //    .FillWidth(1)
-			      //    .Padding(2, 0, 2, 0)
-			      //  [
-				     //   ConstructCurveExtractorWidget()
-			      //  ]
-			      //  + SHorizontalBox::Slot()
-			      //  .FillWidth(2)
-			      //  [
-				     //   ConstructSequenceBrowser()
-			      //  ]
-			      //  // ] + SHorizontalBox::Slot().AutoWidth()[
-			      //  // 	ConstructBoneTreeList()
-			      //  // ]
-		       // ]
-	       ];
-}
-
 // FReply FAnimSequenceToolkitsModule::OnSequencesAdd()
 // {
 // 	TArray<FAssetData> SelectedAssets = GetCurrentSelectionDelegate.Execute();
@@ -425,22 +415,26 @@ TSharedRef<SDockTab> FAnimSequenceToolkitsModule::OnSpawnPluginTab(
 // 	return FReply::Handled();
 // }
 
-void FAnimSequenceToolkitsModule::PluginButtonClicked()
+*/
+
+void FAnimCurveToolModule::PluginButtonClicked()
 {
 	FGlobalTabmanager::Get()->InvokeTab(AnimCurveExportTabName);
 }
 
-void FAnimSequenceToolkitsModule::AddMenuExtension(FMenuBuilder& Builder)
+void FAnimCurveToolModule::AddMenuExtension(FMenuBuilder& Builder)
 {
 	Builder.AddMenuEntry(FAnimCurveExportCommands::Get().OpenPluginWindow);
 }
 
-void FAnimSequenceToolkitsModule::AddToolbarExtension(
+void FAnimCurveToolModule::AddToolbarExtension(
 	FToolBarBuilder& Builder)
 {
 	Builder.AddToolBarButton(FAnimCurveExportCommands::Get().OpenPluginWindow);
 }
 
+
 #undef LOCTEXT_NAMESPACE
 
-IMPLEMENT_MODULE(FAnimSequenceToolkitsModule, AnimCurveExport)
+IMPLEMENT_MODULE(FAnimCurveToolModule, AnimCurveExport)
+

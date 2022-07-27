@@ -1,18 +1,20 @@
-﻿#include "AnimSequenceToolWidget.h"
+﻿#include "AnimCurveToolWidget.h"
 #include "PropertyEditing.h"
 #include "Modules/ModuleManager.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Input/SButton.h"
-#include "AnimSequenceUtils.h"
+#include "AnimCurveUtils.h"
 #include "EngineUtils.h"
+#include "JsonObjectConverter.h"
 #include "Dom/JsonObject.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogAnimSequenceUtils, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogAnimCurveTool, Log, All);
 
-#define LOCTEXT_NAMESPACE "SAnimSequenceTool"
+#define LOCTEXT_NAMESPACE "SAnimCurveTool"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // UAnimCurveSettings | Anim Curve settings
@@ -42,8 +44,16 @@ void UAnimSequenceSelection::PostEditChangeProperty(struct FPropertyChangedEvent
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 
+bool UAnimJsonSettings::IsInitialized = false;
+UAnimJsonSettings* UAnimJsonSettings::DefaultSetting = nullptr;
+
+void UAnimJsonSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+
 template <typename T>
-TSharedPtr<IDetailsView> SAnimSequenceToolWidget::CreateSettingView(FString Name, T* SettingViewObject)
+TSharedPtr<IDetailsView> SAnimCurveToolWidget::CreateSettingView(FString Name, T* SettingViewObject)
 {
 	FPropertyEditorModule& EditModule = FModuleManager::Get().GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	FDetailsViewArgs DetailsViewArgs
@@ -62,13 +72,13 @@ TSharedPtr<IDetailsView> SAnimSequenceToolWidget::CreateSettingView(FString Name
 	DetailsViewArgs.bShowOptions = false;
 
 	TSharedPtr<IDetailsView> ObjectSettingView = EditModule.CreateDetailView(DetailsViewArgs);
-	ObjectSettingView->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateStatic(&SAnimSequenceToolWidget::IsPropertyVisible, true));
+	ObjectSettingView->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateStatic(&SAnimCurveToolWidget::IsPropertyVisible, true));
 	ObjectSettingView->SetDisableCustomDetailLayouts(true);
 	ObjectSettingView->SetObject(SettingViewObject);
 	return ObjectSettingView;
 }
 
-void SAnimSequenceToolWidget::Construct(const FArguments& Args)
+void SAnimCurveToolWidget::Construct(const FArguments& Args)
 {
 	Setup();
 
@@ -77,13 +87,14 @@ void SAnimSequenceToolWidget::Construct(const FArguments& Args)
 	];
 }
 
-bool SAnimSequenceToolWidget::IsPropertyVisible(const FPropertyAndParent& PropertyAndParent, bool bInShouldShowNonEditable)
+bool SAnimCurveToolWidget::IsPropertyVisible(const FPropertyAndParent& PropertyAndParent, bool bInShouldShowNonEditable)
 {
 	const FString VisualCategoryNames[] =
 	{
 		"SequenceSelection",
 		"CurveSetting",
 		"FootstepSetting",
+		"JsonGeneration"
 	};
 
 	FString PropertyCategoryName = PropertyAndParent.Property.GetMetaData("Category");
@@ -98,7 +109,7 @@ bool SAnimSequenceToolWidget::IsPropertyVisible(const FPropertyAndParent& Proper
 	return false;
 }
 
-void SAnimSequenceToolWidget::Setup()
+void SAnimCurveToolWidget::Setup()
 {
 	AnimCurveSetting = UAnimCurveSettings::Get();
 	AnimCurveSetting->m_ParentWidget = this;
@@ -108,13 +119,17 @@ void SAnimSequenceToolWidget::Setup()
 
 	SequenceSelection = UAnimSequenceSelection::Get();
 	SequenceSelection->m_ParentWidget = this;
+
+	JsonSetting = UAnimJsonSettings::Get();
+	JsonSetting->m_ParentWidget = this;
 }
 
-TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
+TSharedRef<SWidget> SAnimCurveToolWidget::Content()
 {
 	AnimCurveSettingView = CreateSettingView<UAnimCurveSettings>(TEXT("Resources"), UAnimCurveSettings::Get());
 	FootstepSettingView = CreateSettingView<UFootstepSettings>(TEXT("Resources"), UFootstepSettings::Get());
 	SequenceSelectionView = CreateSettingView<UAnimSequenceSelection>(TEXT("Resources"), UAnimSequenceSelection::Get());
+	JsonSettingView = CreateSettingView<UAnimJsonSettings>(TEXT("Resources"), UAnimJsonSettings::Get());
 
 	SVerticalBox::FSlot& PropertyPannel = SVerticalBox::Slot().Padding(2.0f, 1.0f)
 	[
@@ -152,6 +167,16 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 						FootstepSettingView->AsShared()
 					]
 				]
+
+				+ SVerticalBox::Slot()
+				  .AutoHeight()
+				  .Padding(FEditorStyle::GetMargin("StandardDialog.ContentPadding"))
+				[
+					SNew(SHorizontalBox) + SHorizontalBox::Slot().VAlign(VAlign_Top)
+					[
+						JsonSettingView->AsShared()
+					]
+				]
 			]
 		]
 	];
@@ -171,7 +196,7 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 		[
 			SNew(SButton)
 				.Text(LOCTEXT("Extract_Curves", "Extract Curves"))
-				.OnClicked(this, &SAnimSequenceToolWidget::OnSubmitExtractCurves)
+				.OnClicked(this, &SAnimCurveToolWidget::OnSubmitExtractCurves)
 		]
 
 		+ SHorizontalBox::Slot()
@@ -182,7 +207,7 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 		[
 			SNew(SButton)
 				.Text(LOCTEXT("Mark_Footsteps", "Mark Footsteps"))
-				.OnClicked(this, &SAnimSequenceToolWidget::OnSubmitMarkFootsteps)
+				.OnClicked(this, &SAnimCurveToolWidget::OnSubmitMarkFootsteps)
 		]
 
 		//+ SHorizontalBox::Slot()
@@ -193,7 +218,7 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 		//[
 		//	SNew(SButton)
 		//	.Text(LOCTEXT("Debug", "Debug"))
-		//	.OnClicked(this, &SCharacterProcessWindow::OnDebugButtonClick)
+		//	.OnClicked(this, &SAnimCurveToolWidget::OnDebugButtonClick)
 		//]
 
 		+ SHorizontalBox::Slot()
@@ -205,9 +230,22 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 			SNew(SButton)
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
-				.Text(LOCTEXT("Load_From_Json", "Load From Json"))
+				.Text(LOCTEXT("Generate_Json", "Generate Anim1P Json"))
 			// .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
-			// .OnClicked(this, &SCharacterProcessWindow::OnDocumentButtonClick)
+			    .OnClicked(this, &SAnimCurveToolWidget::OnSubmitGenerateJson)
+		]
+
+		+ SHorizontalBox::Slot()
+		  .AutoWidth()
+		  .HAlign(HAlign_Center)
+		  .VAlign(VAlign_Center)
+		  .Padding(4, 0, 0, 0)
+		[
+			SNew(SButton)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				.Text(LOCTEXT("Load_Json", "Load from Json"))
+				.OnClicked(this, &SAnimCurveToolWidget::OnSubmitLoadJson)
 		]
 	];
 
@@ -216,7 +254,7 @@ TSharedRef<SWidget> SAnimSequenceToolWidget::Content()
 	return MainContent;
 }
 
-void SAnimSequenceToolWidget::ProcessAnimSequencesFilter()
+void SAnimCurveToolWidget::ProcessAnimSequencesFilter()
 {
 	if (SequenceSelection->IsImportFromJson)
 	{
@@ -229,36 +267,123 @@ void SAnimSequenceToolWidget::ProcessAnimSequencesFilter()
 }
 
 
-FReply SAnimSequenceToolWidget::OnSubmitMarkFootsteps()
+FReply SAnimCurveToolWidget::OnSubmitMarkFootsteps()
 {
 	ProcessAnimSequencesFilter();
+	SequenceSelection->ErrorSequences.Empty();
 	for (auto Seq : SequenceSelection->AnimationSequences)
 	{
+		bool IsNoError = false;
 		for (auto& BoneName : FootstepSetting->TrackBoneNames)
 		{
-			if (!AnimSequenceUtils::MarkFootstepsFor1PAnimation(Seq, BoneName, FootstepSetting->IsEnableDebug))
+			if (!FAnimCurveUtils::MarkFootstepsFor1PAnimation(Seq, BoneName, FootstepSetting->IsEnableDebug))
 			{
-				UE_LOG(LogAnimSequenceUtils, Log, TEXT("[%s->%s] may not be suitable for footstep recognition"), *Seq->GetName(), *BoneName);
+				UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] may not be suitable for footstep recognition, skipped."), *Seq->GetName(), *BoneName);
+			} else
+			{
+				UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] attempt to mark footsteps success!"), *Seq->GetName(), *BoneName);
+				IsNoError = true;
+				break;
 			}
+		}
+		if(!IsNoError)
+		{
+			SequenceSelection->ErrorSequences.Add(Seq);
 		}
 	}
 	return FReply::Handled();
 }
 
-FReply SAnimSequenceToolWidget::OnSubmitExtractCurves()
+FReply SAnimCurveToolWidget::OnSubmitExtractCurves()
 {
 	ProcessAnimSequencesFilter();
 	for (auto Seq : SequenceSelection->AnimationSequences)
 	{
-		if (!AnimSequenceUtils::SaveBonesCurves(Seq, AnimCurveSetting->TargetBoneName, AnimCurveSetting->ExportDirectoryPath.Path))
+		if (!FAnimCurveUtils::SaveBonesCurves(Seq, AnimCurveSetting->TargetBoneName, AnimCurveSetting->ExportDirectoryPath.Path))
 		{
-			UE_LOG(LogAnimSequenceUtils, Log, TEXT("[%s->%s] target bone name not exists!"), *Seq->GetName(), *AnimCurveSetting->TargetBoneName);
+			UE_LOG(LogAnimCurveTool, Warning, TEXT("[%s->%s]: Error ocurrs when save bone curves!"), *Seq->GetName(), *AnimCurveSetting->TargetBoneName);
 		}
 	}
 	return FReply::Handled();
 }
 
-bool SAnimSequenceToolWidget::LoadFromAnim1pJson(const FFilePath& JsonName)
+FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
+{
+	TArray<UAnimSequence*> AnimSequences;
+	FAnimCurveUtils::GetObjectsOfClass<UAnimSequence>(AnimSequences);
+	AnimSequences.RemoveAll([&](auto Seq)
+	{ 
+		FString SeqName = Seq->GetName();
+		bool IsRequired = true;
+
+		for (auto& Key : JsonSetting->KeywordsMustHave)
+		{
+			IsRequired &= SeqName.Contains(Key);
+			// UE_LOG(LogAnimCurveTool, Log, TEXT("Check if %s contains %s, %d"), *SeqName, *Key, IsRequired);
+		}
+	
+		bool IsContainsAny = false;
+		for (auto& Key : JsonSetting->IncludedKeywords)
+		{
+			IsContainsAny |= SeqName.Contains(Key);
+		}
+		IsRequired &= IsContainsAny;
+
+		for (auto& Key : JsonSetting->ExcludedKeywords)
+		{
+			IsRequired &= !SeqName.Contains(Key);
+		}
+
+		for (auto& Key : JsonSetting->ExcludedPrefix)
+		{
+			IsRequired &= !SeqName.StartsWith(Key);
+		}
+
+		// UE_LOG(LogTemp, Log, TEXT("%s is ok"), *SeqName);
+		return !IsRequired;
+	});
+
+	TArray<TSharedPtr<FJsonValue>> SequencesRefs;
+	for (const auto Seq : AnimSequences)
+	{
+		auto RefString = FString::Format(TEXT("{0}'{1}'"), {TEXT("AnimSequence"), Seq->GetPathName()});
+		SequencesRefs.Push(MakeShared<FJsonValueString>(RefString));
+	}
+	// Construct Json Object
+	TSharedPtr<FJsonObject> JsonObj = MakeShared<FJsonObject>();
+	JsonObj->SetArrayField(TEXT("AnimSequences"), SequencesRefs);
+
+	typedef TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>> FPrettyJsonStringWriterFactory;
+	typedef TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>> FPrettyJsonStringWriter;
+
+	FString OutputString;
+	TSharedRef<FPrettyJsonStringWriter> Writer = FPrettyJsonStringWriterFactory::Create(&OutputString);
+	if (FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer))
+	{
+		auto AbsPath = FPaths::ConvertRelativePathToFull(JsonSetting->ExportDirectoryPath.Path + TEXT("anim1p.json"));
+		if (FFileHelper::SaveStringToFile(OutputString, *AbsPath,
+			FFileHelper::EEncodingOptions::AutoDetect, &IFileManager::Get(), FILEWRITE_None))
+		{
+			UE_LOG(LogAnimCurveTool, Log, TEXT("Save Json to '%s' Success!"), *AbsPath);
+		}
+	}
+
+	return FReply::Handled();
+}
+
+FReply SAnimCurveToolWidget::OnSubmitLoadJson()
+{
+	if (SequenceSelection->IsImportFromJson)
+	{
+		if(!LoadFromAnim1pJson(SequenceSelection->Anim1pJsonPath))
+		{
+			UE_LOG(LogAnimCurveTool, Warning, TEXT("Load Json error from %s, file not found or illegal Json file"), *SequenceSelection->Anim1pJsonPath.FilePath)
+		}
+	}
+	return FReply::Handled();
+}
+
+bool SAnimCurveToolWidget::LoadFromAnim1pJson(const FFilePath& JsonName)
 {
 	FString FileContents;
 	if (!FFileHelper::LoadFileToString(FileContents, *JsonName.FilePath))
@@ -273,22 +398,29 @@ bool SAnimSequenceToolWidget::LoadFromAnim1pJson(const FFilePath& JsonName)
 		return false;
 	}
 
-	TArray<FFilePath> AnimSequencePaths;
-	
-	for (auto GunTypeIter = JsonObj->Values.CreateConstIterator(); GunTypeIter; ++GunTypeIter)
+	TArray<FString> AnimSequencePaths;
+
+	// for (auto GunTypeIter = JsonObj->Values.CreateConstIterator(); GunTypeIter; ++GunTypeIter)
+	// {
+	// 	UE_LOG(LogAnimCurveTool, Log, TEXT("Parse GunType %s"), *GunTypeIter->Key);
+	// 	const auto GunTypeObj = GunTypeIter->Value->AsObject();
+	// 	for (auto GunNameIter = GunTypeObj->Values.CreateConstIterator(); GunNameIter; ++GunNameIter)
+	// 	{
+	// 		UE_LOG(LogAnimCurveTool, Log, TEXT("Parse GunName %s"), *GunNameIter->Key);
+	// 		auto GunSequences = GunNameIter->Value->AsArray();
+	// 		for (const auto& GunSeq : GunSequences)
+	// 		{
+	// 			UE_LOG(LogAnimCurveTool, Log, TEXT("Parse Gun AnimSequence %s"), *GunSeq->AsString());
+	// 			AnimSequencePaths.Add(GunSeq->AsString());
+	// 		}
+	// 	}
+	// }
+
+	auto AnimSequenceJsonArray = JsonObj->GetArrayField("AnimSequences");
+	for (auto& SeqJson : AnimSequenceJsonArray)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Parse GunType %s"), *GunTypeIter->Key);
-		const auto GunTypeObj = GunTypeIter->Value->AsObject();
-		for(auto GunNameIter = GunTypeObj->Values.CreateConstIterator(); GunNameIter; ++GunNameIter) {
-			UE_LOG(LogTemp, Log, TEXT("Parse GunName %s"), *GunNameIter->Key);
-			auto GunSequences = GunNameIter->Value->AsArray();
-			for(const auto& GunSeq : GunSequences)
-			{
-				UE_LOG(LogTemp, Log, TEXT("Parse Gun AnimSequence %s"), *GunSeq->AsString());
-				AnimSequencePaths.Add(FFilePath{GunSeq->AsString()});
-			}
-		} 
+		AnimSequencePaths.Add(SeqJson->AsString());
 	}
-	
-	return AnimSequenceUtils::LoadAnimSequencesByNames(AnimSequencePaths);
+
+	return FAnimCurveUtils::LoadAnimSequencesByReference(AnimSequencePaths, SequenceSelection->AnimationSequences);
 }

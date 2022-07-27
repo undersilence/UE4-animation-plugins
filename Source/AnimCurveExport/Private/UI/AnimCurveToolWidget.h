@@ -7,10 +7,74 @@
 #include "Widgets/SWidget.h"
 #include "Widgets/SCompoundWidget.h"
 
-#include "AnimSequenceToolWidget.generated.h"
+#include "AnimCurveToolWidget.generated.h"
+
 
 UCLASS()
+class UAnimJsonSettings : public UObject
+{
+	GENERATED_BODY()
 
+public:
+	UAnimJsonSettings()
+	{
+	}
+
+	static UAnimJsonSettings* Get()
+	{
+		if (!IsInitialized)
+		{
+			DefaultSetting = DuplicateObject(GetMutableDefault<UAnimJsonSettings>(), nullptr);
+			DefaultSetting->AddToRoot();
+			IsInitialized = true;
+		}
+
+		return DefaultSetting;
+	}
+
+	static void Destroy()
+	{
+		if (IsInitialized)
+		{
+			if (UObjectInitialized() && DefaultSetting)
+			{
+				DefaultSetting->RemoveFromRoot();
+				DefaultSetting->MarkPendingKill();
+			}
+
+			DefaultSetting = nullptr;
+			IsInitialized = false;
+		}
+	}
+
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+
+private:
+
+	static bool IsInitialized;
+	static UAnimJsonSettings* DefaultSetting;
+
+public:
+	UPROPERTY(EditAnywhere, Category= JsonGeneration)
+	TArray<FString> KeywordsMustHave = {"_1P_"};
+	
+	UPROPERTY(EditAnywhere, Category= JsonGeneration)
+	TArray<FString> IncludedKeywords = {"Crouch", "Walk", "Run", "Sprint"};
+
+	UPROPERTY(EditAnywhere, Category = JsonGeneration)
+	TArray<FString> ExcludedKeywords = {"2", "To", "Offset", "Wounded", "Prone"};
+	
+	UPROPERTY(EditAnywhere, Category = JsonGeneration)
+	TArray<FString> ExcludedPrefix = {"BS_", "Unarmed_"};
+
+	UPROPERTY(EditAnywhere, Category = JsonGeneration)
+	FDirectoryPath ExportDirectoryPath {FPaths::ProjectConfigDir()};
+	
+	SWidget* m_ParentWidget;
+};
+
+
+UCLASS()
 class UFootstepSettings : public UObject
 {
 	GENERATED_BODY()
@@ -112,7 +176,7 @@ public:
 	FString TargetBoneName = "LeftHand";
 	
 	UPROPERTY(EditAnywhere, Category=CurveSetting)
-	FDirectoryPath ExportDirectoryPath{"/Game/"};
+	FDirectoryPath ExportDirectoryPath{FPaths::ProjectContentDir()};
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=CurveSetting)
 	bool IsExtractPositionXYZ = true;
@@ -175,24 +239,27 @@ public:
 	UPROPERTY(EditAnywhere, Category=SequenceSelection)
 	TArray<UAnimSequence*> AnimationSequences;
 	
+	UPROPERTY(VisibleAnywhere, Category=SequenceSelection)
+	TArray<UAnimSequence*> ErrorSequences;
+	
 	SWidget* m_ParentWidget;
 };
 
-class SAnimSequenceToolWidget : public SCompoundWidget
+class SAnimCurveToolWidget : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SAnimSequenceToolWidget)
+	SLATE_BEGIN_ARGS(SAnimCurveToolWidget)
 		{
 		}
 
 	SLATE_END_ARGS()
 
 public:
-	SAnimSequenceToolWidget()
+	SAnimCurveToolWidget()
 	{
 	}
 
-	~SAnimSequenceToolWidget()
+	~SAnimCurveToolWidget()
 	{
 	}
 
@@ -215,6 +282,10 @@ private:
 
 	FReply OnSubmitExtractCurves();
 
+	FReply OnSubmitGenerateJson();
+	
+	FReply OnSubmitLoadJson();
+
 	bool LoadFromAnim1pJson(const FFilePath& JsonPath);
 	
 private:
@@ -227,6 +298,9 @@ private:
 
 	UAnimSequenceSelection* SequenceSelection;
 	TSharedPtr<IDetailsView> SequenceSelectionView;
+
+	UAnimJsonSettings* JsonSetting;
+	TSharedPtr<IDetailsView> JsonSettingView;
 	
 public:
 

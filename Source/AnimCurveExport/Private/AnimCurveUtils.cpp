@@ -1,4 +1,4 @@
-﻿#include "AnimSequenceUtils.h"
+﻿#include "AnimCurveUtils.h"
 
 #include "AnimationBlueprintLibrary.h"
 #include "AssetRegistryModule.h"
@@ -7,16 +7,11 @@
 #include "PackageTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
-#include <complex>
+
+DEFINE_LOG_CATEGORY_STATIC(LogAnimCurveUtil, Log, All);
 
 
-DEFINE_LOG_CATEGORY_STATIC(LogAnimSequenceTool, Log, All);
-
-namespace AnimSequenceUtils
-{
-
-
-bool SetVariableCurveHelper(
+bool FAnimCurveUtils::SetVariableCurveHelper(
 	UAnimSequence* Seq, const FString& CurveName, FFloatCurve& InFloatCurve)
 {
 	// Create Variable Curve
@@ -39,13 +34,19 @@ bool SetVariableCurveHelper(
 }
 
 
-bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const FString& SavePath)
+bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const FString& SaveDir)
 {
 	TArray<UPackage*> Packages;
 
 	const auto AnimName = AnimSequence->GetName();
-	const auto PackagePath = SavePath + "/" + AnimName;
+	const auto RawPackagePath = SaveDir + "/" + AnimName;
 	// Initialize Bone Packages
+	FString PackagePath, FailReason;
+	if(!FPackageName::TryConvertFilenameToLongPackageName(RawPackagePath, PackagePath, &FailReason))
+	{
+		UE_LOG(LogAnimCurveUtil, Error, TEXT("[%s->%s]: Create packages error, %s."), *AnimName, *BoneName, *FailReason)
+		return false;
+	}
 	const auto CurveNamePrefix = AnimName + "_" + BoneName;
 	auto PosCurve = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Translation");
 	auto RotCurve = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Rotation");
@@ -55,9 +56,10 @@ bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const
 
 	TArray<FVector> PosKeys;
 	TArray<FQuat> RotKeys;
-	if(!GetBoneKeysByNameHelper(AnimSequence, BoneName, PosKeys, RotKeys, true))
+	if (!GetBoneKeysByNameHelper(AnimSequence, BoneName, PosKeys, RotKeys, true))
 	{
-		UE_LOG(LogAnimSequenceTool, Warning, TEXT("Bone Not Exist!"));
+		UE_LOG(LogAnimCurveUtil, Error, TEXT("[%s->%s]: Bone not Exists!"), *AnimName, *BoneName);
+		return false;
 	}
 
 	for (int i = 0; i < AnimSequence->GetRawNumberOfFrames(); ++i)
@@ -79,13 +81,25 @@ bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const
 	return UEditorLoadingAndSavingUtils::SavePackages(Packages, true);
 }
 
-bool LoadAnimSequencesByNames(const TArray<FFilePath>& AnimSequencePaths)
+
+bool FAnimCurveUtils::LoadAnimSequencesByReference(const TArray<FString>& AnimSequencePaths, TArray<UAnimSequence*>& OutSequences)
 {
-	// auto obj = LoadObject<UAnimSequence>(nullptr, TEXT("/Game/DFMCharacter/Extra/AR_M_1P_AK74_RunB.uasset"));
+	for (auto& Path : AnimSequencePaths)
+	{
+		auto Seq = LoadObject<UAnimSequence>(nullptr, *Path);
+		if (Seq)
+		{
+			OutSequences.AddUnique(Seq);
+		}
+		else
+		{
+			UE_LOG(LogAnimCurveUtil, Log, TEXT("Load Failed from %s: %s"), *Seq->GetName(), *Path);
+		}
+	}
 	return true;
 }
 
-UCurveVector* CreateCurveVectorAsset(const FString& PackagePath,
+UCurveVector* FAnimCurveUtils::CreateCurveVectorAsset(const FString& PackagePath,
 	const FString& CurveName)
 {
 	const auto PackageName =
@@ -103,7 +117,7 @@ UCurveVector* CreateCurveVectorAsset(const FString& PackagePath,
 	return NewObj;
 }
 
-bool GetBoneKeysByNameHelper(
+bool FAnimCurveUtils::GetBoneKeysByNameHelper(
 	UAnimSequence* Seq, FString const& BoneName, TArray<FVector>& OutPosKey,
 	TArray<FQuat>& OutRotKey, bool bConvertCS /* = false */)
 {
@@ -146,7 +160,7 @@ bool GetBoneKeysByNameHelper(
 	do
 	{
 		auto _BoneName = RefSkeleton.GetBoneName(BoneIndex);
-		UE_LOG(LogTemp, Log, TEXT("Current Bone Hierarchy %d, %s"), BoneIndex, *_BoneName.ToString());
+		UE_LOG(LogAnimCurveUtil, Log, TEXT("Current Bone Hierarchy %d, %s"), BoneIndex, *_BoneName.ToString());
 
 		auto TrackIndex = AnimTrackNames.IndexOfByKey(_BoneName); // Correspond BoneIndex in AnimTracks, Find by Unique Name
 		auto Track = Seq->GetRawAnimationTrack(TrackIndex);
@@ -157,7 +171,7 @@ bool GetBoneKeysByNameHelper(
 		// FAnimationRuntime::GetComponentSpaceTransformRefPose();
 		for (int i = 0; i < OutPosKey.Num(); ++i)
 		{
-			// UE_LOG(LogTemp, Log, TEXT("BoneIndex: %d, Get Relative Z value %f."),
+			// UE_LOG(LogAnimCurveUtil, Log, TEXT("BoneIndex: %d, Get Relative Z value %f."),
 			// BoneIndex, CurrPosKey[x].Z);
 			OutPosKey[i] += CurrPosKey[x];
 			OutRotKey[i] *= CurrRotKey[y];
@@ -171,7 +185,7 @@ bool GetBoneKeysByNameHelper(
 	return true;
 }
 
-bool MarkFootstepsFor1PAnimation(
+bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
 	UAnimSequence* Seq, FString const& KeyBone /* = "LeftHand" */, bool bDebug /* = false */)
 {
 	FFloatCurve FootstepsCurve, PosXCurve, PosZCurve, RotYCurve;
@@ -180,7 +194,7 @@ bool MarkFootstepsFor1PAnimation(
 	TArray<FQuat> RotKeys;
 	if (!GetBoneKeysByNameHelper(Seq, KeyBone, PosKeys, RotKeys, true))
 	{
-		UE_LOG(LogAnimSequenceTool, Warning, TEXT("[%s] BoneName (%s) not exist, or Curves can not be extracted"), *Seq->GetName() , *KeyBone);
+		UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] BoneName (%s) not exist, or Curves can not be extracted"), *Seq->GetName(), *KeyBone);
 		return false;
 	}
 	// Total Nums of the Key
@@ -217,14 +231,13 @@ bool MarkFootstepsFor1PAnimation(
 		PosZCurve.FloatCurve.UpdateOrAddKey(Time, CurrPos.Z);
 		RotYCurve.FloatCurve.UpdateOrAddKey(Time, CurrRot.Y, true);
 	}
-	
 
-	if(bDebug)
+	if (bDebug)
 	{
 		RotAvg /= Seq->GetNumberOfFrames();
 		PosAvg /= Seq->GetNumberOfFrames();
-		UE_LOG(LogTemp, Log, TEXT("key counts Pos: %d, Rot: %d"), N, M);
-		UE_LOG(LogTemp, Log, TEXT("Position Average: %f, Rotation Average: %f"),
+		UE_LOG(LogAnimCurveUtil, Log, TEXT("key counts Pos: %d, Rot: %d"), N, M);
+		UE_LOG(LogAnimCurveUtil, Log, TEXT("Position Average: %f, Rotation Average: %f"),
 			PosAvg.X, RotAvg.Y);
 	}
 
@@ -234,7 +247,7 @@ bool MarkFootstepsFor1PAnimation(
 	TArray<FFootstepMarker> LocalMinims;
 	TArray<int32> MinimalKeys;
 	TArray<int32> Permutations;
-	
+
 	// Ignore end frame, cause frame_start == frame_end
 	PosCache.Pop();
 	RotCache.Pop();
@@ -270,9 +283,10 @@ bool MarkFootstepsFor1PAnimation(
 		FootstepsCurve.UpdateOrAddKey(LocalMinims[I].Orientation, Seq->GetTimeAtFrame(MinimalKeys[I]));
 		FootstepsCurve.UpdateOrAddKey(-LocalMinims[J].Orientation, Seq->GetTimeAtFrame(MinimalKeys[J]) - 0.001);
 		FootstepsCurve.UpdateOrAddKey(LocalMinims[J].Orientation, Seq->GetTimeAtFrame(MinimalKeys[J]));
+		
 		if (LocalMinims[I].Orientation == LocalMinims[J].Orientation)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[%s] Footstep Marks on the same side, please check it manually."), *Seq->GetName());
+			UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s->%s] Footstep Marks on the same side, please check it manually."), *Seq->GetName(), *KeyBone);
 			return false;
 		}
 	}
@@ -291,12 +305,12 @@ bool MarkFootstepsFor1PAnimation(
 		}
 		if (bLoop)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[%s] Footstep Marks may contain potential loops."), *Seq->GetName());
+			UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] Footstep Marks may contain potential loops."), *Seq->GetName());
 			return false;
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[%s] mark footstep failed when target Curves.Pos.Z (of %s) contains more than 2 local minimas"), *Seq->GetName(), *KeyBone);
+			UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] mark footstep failed when target Curves.Pos.Z (of %s) contains more than 2 local minimas"), *Seq->GetName(), *KeyBone);
 			return false;
 		}
 	}
@@ -305,11 +319,11 @@ bool MarkFootstepsFor1PAnimation(
 		auto I = Permutations[0];
 		FootstepsCurve.UpdateOrAddKey(-LocalMinims[I].Orientation, Seq->GetTimeAtFrame(MinimalKeys[I]) - 0.001);
 		FootstepsCurve.UpdateOrAddKey(LocalMinims[I].Orientation, Seq->GetTimeAtFrame(MinimalKeys[I]));
-		UE_LOG(LogTemp, Warning, TEXT("[%s] has only one footstep mark, please check it manually."), *Seq->GetName());
+		UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] has only one footstep mark, please check it manually."), *Seq->GetName());
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] no footstep detected, skip."), *Seq->GetName());
+		UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] no footstep detected, skip."), *Seq->GetName());
 		return true;
 	}
 
@@ -320,13 +334,11 @@ bool MarkFootstepsFor1PAnimation(
 	// }
 
 	SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
-	if(bDebug)
+	if (bDebug)
 	{
 		SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosX_Curve"), *KeyBone), PosXCurve);
 		SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosZ_Curve"), *KeyBone), PosZCurve);
 		SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_RotY_Curve"), *KeyBone), RotYCurve);
 	}
 	return true;
-}
-
 }

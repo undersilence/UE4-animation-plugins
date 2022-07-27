@@ -3,16 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ARFilter.h"
 #include "ContentBrowserDelegates.h"
-#include "IAnimationSequenceBrowser.h"
-#include "IDetailCustomization.h"
 #include "IDetailsView.h"
-#include "ISkeletonTreeItem.h"
 #include "Modules/ModuleManager.h"
-#include "Animation/AnimSequence.h"
-#include "Components/VerticalBox.h"
-#include "Types/SlateEnums.h"
 
 class FToolBarBuilder;
 class FMenuBuilder;
@@ -21,7 +14,7 @@ class STextBlock;
 class UCurveVector;
 
 
-class FAnimSequenceToolkitsModule : public IModuleInterface
+class FAnimCurveToolModule : public IModuleInterface
 {
 public:
 	/** IModuleInterface implementation */
@@ -36,6 +29,10 @@ private:
 	void AddToolbarExtension(FToolBarBuilder& Builder);
 	void AddMenuExtension(FMenuBuilder& Builder);
 	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+
+	/*
+ * Deprecated
+ *
 	// FReply OnSequencesAdd();
 	// FReply OnSequencesClear();
 
@@ -96,7 +93,8 @@ private:
 	// TSharedPtr<SWidget> PathPickerWidget;
 	// TSharedPtr<SWidget> BonePickerWidget;
 	// FGetCurrentSelectionDelegate GetCurrentSelectionDelegate;
-
+*/
+	
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
 };
