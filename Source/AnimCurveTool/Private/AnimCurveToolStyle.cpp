@@ -1,14 +1,14 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
-#include "AnimCurveExportStyle.h"
+#include "AnimCurveToolStyle.h"
 #include "Styling/SlateStyleRegistry.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Slate/SlateGameResources.h"
 #include "Interfaces/IPluginManager.h"
 
-TSharedPtr< FSlateStyleSet > FAnimCurveExportStyle::StyleInstance = NULL;
+TSharedPtr< FSlateStyleSet > FAnimCurveToolStyle::StyleInstance = NULL;
 
-void FAnimCurveExportStyle::Initialize()
+void FAnimCurveToolStyle::Initialize()
 {
 	if (!StyleInstance.IsValid())
 	{
@@ -17,16 +17,16 @@ void FAnimCurveExportStyle::Initialize()
 	}
 }
 
-void FAnimCurveExportStyle::Shutdown()
+void FAnimCurveToolStyle::Shutdown()
 {
 	FSlateStyleRegistry::UnRegisterSlateStyle(*StyleInstance);
 	ensure(StyleInstance.IsUnique());
 	StyleInstance.Reset();
 }
 
-FName FAnimCurveExportStyle::GetStyleSetName()
+FName FAnimCurveToolStyle::GetStyleSetName()
 {
-	static FName StyleSetName(TEXT("AnimCurveExportStyle"));
+	static FName StyleSetName(TEXT("AnimCurveToolStyle"));
 	return StyleSetName;
 }
 
@@ -40,12 +40,12 @@ const FVector2D Icon16x16(16.0f, 16.0f);
 const FVector2D Icon20x20(20.0f, 20.0f);
 const FVector2D Icon40x40(40.0f, 40.0f);
 
-TSharedRef< FSlateStyleSet > FAnimCurveExportStyle::Create()
+TSharedRef< FSlateStyleSet > FAnimCurveToolStyle::Create()
 {
-	TSharedRef< FSlateStyleSet > Style = MakeShareable(new FSlateStyleSet("AnimCurveExportStyle"));
-	Style->SetContentRoot(IPluginManager::Get().FindPlugin("AnimCurveExport")->GetBaseDir() / TEXT("Resources"));
+	TSharedRef< FSlateStyleSet > Style = MakeShareable(new FSlateStyleSet("AnimCurveToolStyle"));
+	Style->SetContentRoot(IPluginManager::Get().FindPlugin("AnimCurveTool")->GetBaseDir() / TEXT("Resources"));
 
-	Style->Set("AnimCurveExport.OpenPluginWindow", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), Icon40x40));
+	Style->Set("AnimCurveTool.OpenPluginWindow", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), Icon40x40));
 
 	return Style;
 }
@@ -56,7 +56,7 @@ TSharedRef< FSlateStyleSet > FAnimCurveExportStyle::Create()
 #undef TTF_FONT
 #undef OTF_FONT
 
-void FAnimCurveExportStyle::ReloadTextures()
+void FAnimCurveToolStyle::ReloadTextures()
 {
 	if (FSlateApplication::IsInitialized())
 	{
@@ -64,7 +64,7 @@ void FAnimCurveExportStyle::ReloadTextures()
 	}
 }
 
-const ISlateStyle& FAnimCurveExportStyle::Get()
+const ISlateStyle& FAnimCurveToolStyle::Get()
 {
 	return *StyleInstance;
 }

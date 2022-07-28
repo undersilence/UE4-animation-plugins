@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "BoneProxy.h"
+
 #include "IDetailsView.h"
 #include "Animation/AnimSequence.h"
 

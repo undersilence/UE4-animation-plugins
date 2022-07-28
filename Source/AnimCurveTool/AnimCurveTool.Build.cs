@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class AnimCurveExport : ModuleRules
+public class AnimCurveTool : ModuleRules
 {
-	public AnimCurveExport(ReadOnlyTargetRules Target) : base(Target)
+	public AnimCurveTool(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
@@ -25,7 +25,7 @@ public class AnimCurveExport : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core", "AssetRegistry", "SkeletonEditor",
+				"Core",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -37,21 +37,16 @@ public class AnimCurveExport : ModuleRules
 				"Projects",
 				"InputCore",
 				"UnrealEd",
-				"ToolMenus",
+				"LevelEditor",
 				"CoreUObject",
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"Json",
+				"JsonUtilities",
 				"PropertyEditor",
-				"ContentBrowser",
 				"AnimationModifiers",
-				"AssetTools",
-				"SkeletonEditor",
-				"AnimationEditor",
-				"EditorStyle",
-				"CurveEditor",
-				"Json", 
-				"JsonUtilities" 
+				"EditorStyle"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

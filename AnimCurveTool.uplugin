@@ -2,10 +2,10 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0",
-	"FriendlyName": "AnimCurveExport",
-	"Description": "",
+	"FriendlyName": "AnimCurveTool",
+	"Description": "animation curves toolkit",
 	"Category": "Other",
-	"CreatedBy": "zellitu",
+	"CreatedBy": "tzl",
 	"CreatedByURL": "",
 	"DocsURL": "",
 	"MarketplaceURL": "",
@@ -16,7 +16,7 @@
 	"Installed": false,
 	"Modules": [
 		{
-			"Name": "AnimCurveExport",
+			"Name": "AnimCurveTool",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		}

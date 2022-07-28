@@ -5,7 +5,6 @@
 #include "Widgets/Input/SButton.h"
 #include "AnimCurveUtils.h"
 #include "EngineUtils.h"
-#include "JsonObjectConverter.h"
 #include "Dom/JsonObject.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/FileHelper.h"
@@ -14,7 +13,7 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogAnimCurveTool, Log, All);
 
-#define LOCTEXT_NAMESPACE "SAnimCurveTool"
+#define LOCTEXT_NAMESPACE "FAnimCurveToolModule"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // UAnimCurveSettings | Anim Curve settings
