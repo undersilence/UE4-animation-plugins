@@ -234,7 +234,7 @@ public:
 	bool IsImportFromJson = false;
 
 	UPROPERTY(EditAnywhere, Category=SequenceSelection, Meta=(EditCondition="IsImportFromJson", EditConditionHides))
-	FFilePath Anim1pJsonPath;
+	FFilePath AnimJsonPath;
 	
 	UPROPERTY(EditAnywhere, Category=SequenceSelection)
 	TArray<UAnimSequence*> AnimationSequences;
@@ -285,8 +285,9 @@ private:
 	FReply OnSubmitGenerateJson();
 	
 	FReply OnSubmitLoadJson();
+	FReply OnSubmitCheckCameraRoot();
 
-	bool LoadFromAnim1pJson(const FFilePath& JsonPath);
+	bool LoadFromAnimJson(const FFilePath& JsonPath);
 	
 private:
 	

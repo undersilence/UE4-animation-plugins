@@ -37,12 +37,12 @@ void FAnimCurveToolModule::StartupModule()
 		LevelEditorModule.GetMenuExtensibilityManager()->AddExtender(MenuExtender);
 	}
 	
-	{
-		TSharedPtr<FExtender> ToolbarExtender = MakeShareable(new FExtender);
-		ToolbarExtender->AddToolBarExtension("Settings", EExtensionHook::After, PluginCommands, FToolBarExtensionDelegate::CreateRaw(this, &FAnimCurveToolModule::AddToolbarExtension));
-		
-		LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(ToolbarExtender);
-	}
+	// {
+	// 	TSharedPtr<FExtender> ToolbarExtender = MakeShareable(new FExtender);
+	// 	ToolbarExtender->AddToolBarExtension("Settings", EExtensionHook::After, PluginCommands, FToolBarExtensionDelegate::CreateRaw(this, &FAnimCurveToolModule::AddToolbarExtension));
+	// 	
+	// 	LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(ToolbarExtender);
+	// }
 	
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(AnimCurveToolTabName, FOnSpawnTab::CreateRaw(this, &FAnimCurveToolModule::OnSpawnPluginTab))
 		.SetDisplayName(LOCTEXT("FAnimCurveToolTabTitle", "AnimCurveTool"))
@@ -71,11 +71,10 @@ TSharedRef<SDockTab> FAnimCurveToolModule::OnSpawnPluginTab(const FSpawnTabArgs&
 	return SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
-			// Put your tab content here!
 			SNew(SAnimCurveToolWidget)
 		];
 }
-
+ 
 void FAnimCurveToolModule::PluginButtonClicked()
 {
 	FGlobalTabmanager::Get()->InvokeTab(AnimCurveToolTabName);

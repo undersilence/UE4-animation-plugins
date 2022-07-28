@@ -46,7 +46,8 @@ public class AnimCurveTool : ModuleRules
 				"JsonUtilities",
 				"PropertyEditor",
 				"AnimationModifiers",
-				"EditorStyle"
+				"EditorStyle",
+				"AnimationBlueprintEditor"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
