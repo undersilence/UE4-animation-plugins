@@ -47,7 +47,8 @@ public class AnimCurveTool : ModuleRules
 				"PropertyEditor",
 				"AnimationModifiers",
 				"EditorStyle",
-				"AnimationBlueprintEditor"
+				"AnimationBlueprintEditor",
+				"DesktopPlatform"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

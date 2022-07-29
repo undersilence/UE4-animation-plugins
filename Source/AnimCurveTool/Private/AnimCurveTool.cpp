@@ -47,6 +47,9 @@ void FAnimCurveToolModule::StartupModule()
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(AnimCurveToolTabName, FOnSpawnTab::CreateRaw(this, &FAnimCurveToolModule::OnSpawnPluginTab))
 		.SetDisplayName(LOCTEXT("FAnimCurveToolTabTitle", "AnimCurveTool"))
 		.SetMenuType(ETabSpawnerMenuType::Hidden);
+
+	// FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	// PropertyEditorModule.RegisterCustomClassLayout(FName("FAnimRuleFilter"), FOnGetDetailCustomizationInstance::CreateStatic(&FAnimRuleDetailCustom::MakeInstance));
 }
 
 void FAnimCurveToolModule::ShutdownModule()
@@ -58,6 +61,9 @@ void FAnimCurveToolModule::ShutdownModule()
 	FAnimCurveToolCommands::Unregister();
 
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(AnimCurveToolTabName);
+
+	// FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	// PropertyEditorModule.UnregisterCustomClassLayout(FName("FAnimRuleFilter"));
 }
 
 TSharedRef<SDockTab> FAnimCurveToolModule::OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs)

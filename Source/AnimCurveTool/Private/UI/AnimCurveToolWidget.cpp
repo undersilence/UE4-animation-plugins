@@ -1,16 +1,22 @@
 ﻿#include "AnimCurveToolWidget.h"
+
+#include "DesktopPlatformModule.h"
+#include "EditorDirectories.h"
 #include "PropertyEditing.h"
 #include "Modules/ModuleManager.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Input/SButton.h"
-#include "AnimCurveUtils.h"
+#include "Util/AnimCurveUtils.h"
 #include "EngineUtils.h"
+#include "IDesktopPlatform.h"
 #include "Dom/JsonObject.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/FileHelper.h"
+#include "Misc/MessageDialog.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "Tools/UEdMode.h"
+#include "Widgets/Text/STextBlock.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAnimCurveTool, Log, All);
 
@@ -46,6 +52,28 @@ void UAnimSequenceSelection::PostEditChangeProperty(struct FPropertyChangedEvent
 
 bool UAnimJsonSettings::IsInitialized = false;
 UAnimJsonSettings* UAnimJsonSettings::DefaultSetting = nullptr;
+
+// TSharedRef<IDetailCustomization> FAnimRuleDetailCustom::MakeInstance()
+// {
+//     return MakeShareable(new FAnimRuleDetailCustom);
+// }
+//
+// void FAnimRuleDetailCustom::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
+// {
+//
+//     IDetailCategoryBuilder& aaa = DetailBuilder.EditCategory(FName("aaa"));
+//     aaa.AddCustomRow(FText::GetEmpty())
+//     .NameContent()
+//     [
+//         SNew(STextBlock)
+//         .Text(FText::FromString("sss"))
+//     ]
+//     .ValueContent()
+//     [
+//         SNew(SButton)
+//         .Text(FText::FromString("abc"))
+//     ];
+// }
 
 void UAnimJsonSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
 {
@@ -110,6 +138,10 @@ bool SAnimCurveToolWidget::IsPropertyVisible(const FPropertyAndParent& PropertyA
     return false;
 }
 
+#define REGISTER_ANIM_NAME_CHECK(Check_Type) \
+    CheckRegistryTable.Emplace(Check_Type, &FAnimCurveUtils::MatchAnimName<Check_Type>)
+
+
 void SAnimCurveToolWidget::Setup()
 {
     AnimCurveSetting = UAnimCurveSettings::Get();
@@ -123,6 +155,15 @@ void SAnimCurveToolWidget::Setup()
 
     JsonSetting = UAnimJsonSettings::Get();
     JsonSetting->m_ParentWidget = this;
+
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Least_One);
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Have_All);
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Not_Any);
+
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::End_With);
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Not_End);
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Start_With);
+    REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Not_Start);
 }
 
 TSharedRef<SWidget> SAnimCurveToolWidget::Content()
@@ -182,10 +223,10 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
         ]
     ];
 
-    SVerticalBox::FSlot& ButtonChannel = SVerticalBox::Slot()
-                                         .AutoHeight()
-                                         .Padding(2.0f, 1.0f)
-                                         .VAlign(VAlign_Bottom)
+    SVerticalBox::FSlot& ButtonChannel1 = SVerticalBox::Slot()
+                                          .AutoHeight()
+                                          .Padding(2.0f, 1.0f)
+                                          .VAlign(VAlign_Bottom)
     [
         SNew(SHorizontalBox)
 
@@ -235,18 +276,25 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
 						.OnClicked(this, &SAnimCurveToolWidget::OnSubmitCheckCameraRoot)
         ]
 
-        + SHorizontalBox::Slot()
-          .AutoWidth()
-          .HAlign(HAlign_Center)
-          .VAlign(VAlign_Center)
-          .Padding(4, 0, 0, 0)
+    ];
+
+    SVerticalBox::FSlot& ButtonChannel2 = SVerticalBox::Slot()
+                                          .AutoHeight()
+                                          .Padding(2.0f, 1.0f)
+                                          .VAlign(VAlign_Bottom)[
+
+        SNew(SHorizontalBox) + SHorizontalBox::Slot()
+                               .AutoWidth()
+                               .HAlign(HAlign_Center)
+                               .VAlign(VAlign_Center)
+                               .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-				.HAlign(HAlign_Center)
-				.VAlign(VAlign_Center)
-				.Text(LOCTEXT("Generate_Json", "Generate Json"))
-			// .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
-			    .OnClicked(this, &SAnimCurveToolWidget::OnSubmitGenerateJson)
+             .HAlign(HAlign_Center)
+             .VAlign(VAlign_Center)
+             .Text(LOCTEXT("Generate_Json", "Generate Json"))
+         // .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
+             .OnClicked(this, &SAnimCurveToolWidget::OnSubmitGenerateJson)
         ]
 
         + SHorizontalBox::Slot()
@@ -256,24 +304,39 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
           .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-				.HAlign(HAlign_Center)
-				.VAlign(VAlign_Center)
-				.Text(LOCTEXT("Load_Json", "Load from Json"))
-				.OnClicked(this, &SAnimCurveToolWidget::OnSubmitLoadJson)
+             .HAlign(HAlign_Center)
+             .VAlign(VAlign_Center)
+             .Text(LOCTEXT("Load_Json", "Load from Json"))
+             .OnClicked(this, &SAnimCurveToolWidget::OnSubmitLoadJson)
+        ]
+
+        + SHorizontalBox::Slot()
+          .AutoWidth()
+          .HAlign(HAlign_Center)
+          .VAlign(VAlign_Center)
+          .Padding(4, 0, 0, 0)
+        [
+            SNew(SButton)
+             .HAlign(HAlign_Center)
+             .VAlign(VAlign_Center)
+             .Text(LOCTEXT("Open_Document", "Open Document"))
+             .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
+             .OnClicked(this, &SAnimCurveToolWidget::OnDocumentButtonClick)
         ]
     ];
 
-    TSharedRef<SWidget> MainContent = SNew(SVerticalBox) + PropertyPannel + ButtonChannel;
+    TSharedRef<SWidget> MainContent = SNew(SVerticalBox) + PropertyPannel + ButtonChannel1 + ButtonChannel2;
 
     return MainContent;
 }
 
 void SAnimCurveToolWidget::ProcessAnimSequencesFilter()
 {
-    if (SequenceSelection->IsImportFromJson)
-    {
-        LoadFromAnimJson(SequenceSelection->AnimJsonPath);
-    }
+    // if (SequenceSelection->IsImportFromJson)
+    // {
+    //     LoadFromAnimJson(SequenceSelection->AnimJsonPath);
+    // }
+
     SequenceSelection->AnimationSequences.RemoveAll([](const auto Ptr)
     {
         return Ptr == nullptr;
@@ -296,8 +359,7 @@ FReply SAnimCurveToolWidget::OnSubmitMarkFootsteps()
             }
             else
             {
-                UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] attempt to mark footsteps success!"), *Seq->GetName(),
-                       *BoneName);
+                // UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] attempt to mark footsteps success!"), *Seq->GetName(), *BoneName);
                 IsNoError = true;
                 break;
             }
@@ -328,44 +390,30 @@ FReply SAnimCurveToolWidget::OnSubmitExtractCurves()
 FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
 {
     TArray<UAnimSequence*> AnimSequences;
-    FAnimCurveUtils::GetObjectsOfClass<UAnimSequence>(AnimSequences);
-    AnimSequences.RemoveAll([&](auto Seq)
+    FAnimCurveUtils::GetAnimAssets(JsonSetting->SearchPath.Path, AnimSequences);
+
+    for (auto& Filter : JsonSetting->AnimRuleFilters)
     {
-        FString SeqName = Seq->GetName();
-        bool IsRequired = true;
-
-        for (auto& Key : JsonSetting->KeywordsMustHave)
-        {
-            IsRequired &= SeqName.Contains(Key);
-            // UE_LOG(LogAnimCurveTool, Log, TEXT("Check if %s contains %s, %d"), *SeqName, *Key, IsRequired);
-        }
-
-        bool IsContainsAny = false;
-        for (auto& Key : JsonSetting->IncludedKeywords)
-        {
-            IsContainsAny |= SeqName.Contains(Key);
-        }
-        IsRequired &= IsContainsAny;
-
-        for (auto& Key : JsonSetting->ExcludedKeywords)
-        {
-            IsRequired &= !SeqName.Contains(Key);
-        }
-
-        for (auto& Key : JsonSetting->ExcludedPrefix)
-        {
-            IsRequired &= !SeqName.StartsWith(Key);
-        }
-
-        // UE_LOG(LogTemp, Log, TEXT("%s is ok"), *SeqName);
-        return !IsRequired;
-    });
+        AnimSequences.RemoveAll(
+            [&](auto Seq) -> bool
+            {
+                auto IsRequired = CheckRegistryTable[Filter.FilterType](Filter.Keywords, Seq->GetName());
+                // if(!IsRequired)
+                // {
+                //     UE_LOG(LogAnimCurveTool, Log, TEXT("Remove %s, due to rule %s"), *Seq->GetName(), *Filter.Keywords[0]);
+                // }
+                return !IsRequired;
+            });
+    }
 
     TArray<TSharedPtr<FJsonValue>> SequencesRefs;
     for (const auto Seq : AnimSequences)
     {
-        auto RefString = FString::Format(TEXT("{0}'{1}'"), {TEXT("AnimSequence"), Seq->GetPathName()});
-        SequencesRefs.Push(MakeShared<FJsonValueString>(RefString));
+        FString PackagePath; // = FString::Format(TEXT("{0}'{1}'"), {TEXT("AnimSequence"), Seq->GetPathName()});
+        if (FPackageName::TryConvertFilenameToLongPackageName(Seq->GetPathName(), PackagePath))
+        {
+            SequencesRefs.Push(MakeShared<FJsonValueString>(PackagePath));
+        }
     }
     // Construct Json Object
     TSharedPtr<FJsonObject> JsonObj = MakeShared<FJsonObject>();
@@ -379,7 +427,7 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
     if (FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer))
     {
         auto AbsPath =
-            FPaths::ConvertRelativePathToFull(JsonSetting->ExportDirectoryPath.Path + TEXT("anim_list.json"));
+            FPaths::ConvertRelativePathToFull(JsonSetting->ExportPath.FilePath);
         if (FFileHelper::SaveStringToFile(OutputString, *AbsPath,
                                           FFileHelper::EEncodingOptions::AutoDetect, &IFileManager::Get(),
                                           FILEWRITE_None))
@@ -391,16 +439,56 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
     return FReply::Handled();
 }
 
+FReply SAnimCurveToolWidget::OnDocumentButtonClick()
+{
+    FPlatformProcess::LaunchURL(TEXT("https://iwiki.woa.com/pages/viewpage.action?pageId=2006664229"), NULL, NULL);
+    return FReply::Handled();
+}
+
 FReply SAnimCurveToolWidget::OnSubmitLoadJson()
 {
-    if (SequenceSelection->IsImportFromJson)
+    // Prompt the user for the filenames
+    TArray<FString> OpenFilenames;
+    IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
+    bool bOpened = false;
+    int32 FilterIndex = -1;
+
+    if (DesktopPlatform)
     {
-        if (!LoadFromAnimJson(SequenceSelection->AnimJsonPath))
+        const void* ParentWindowWindowHandle = FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr);
+
+        bOpened = DesktopPlatform->OpenFileDialog(
+            ParentWindowWindowHandle,
+            LOCTEXT("ImportDialogTitle", "Import").ToString(),
+            FEditorDirectories::Get().GetLastDirectory(ELastDirectory::GENERIC_IMPORT),
+            TEXT(""),
+            "Curve Table JSON (*.json)|*.json",
+            EFileDialogFlags::Multiple,
+            OpenFilenames,
+            FilterIndex // file type dependent
+        );
+    }
+    if (bOpened)
+    {
+        FString JsonPath_Succ, JsonPath_Fail;
+        for (auto Filename : OpenFilenames)
         {
-            UE_LOG(LogAnimCurveTool, Warning, TEXT("Load Json error from %s, file not found or illegal Json file"),
-                   *SequenceSelection->AnimJsonPath.FilePath)
+            if (!LoadFromAnimJson(Filename))
+            {
+                JsonPath_Fail.Append(Filename).Append("\n");
+                UE_LOG(LogAnimCurveTool, Warning, TEXT("Load Json error from %s, file not found or illegal Json file"),
+                       *Filename);
+            }
         }
-    } 
+
+        if (JsonPath_Fail.Len())
+        {
+            FMessageDialog::Open(EAppMsgType::Ok,
+                                 FText::Format(
+                                     LOCTEXT("Load_Json_Error", "Load Json Complete, but get error when load: \n {0}"),
+                                     FText::FromString(JsonPath_Fail)));
+        }
+    }
     return FReply::Handled();
 }
 
@@ -437,10 +525,10 @@ FReply SAnimCurveToolWidget::OnSubmitCheckCameraRoot()
 }
 
 
-bool SAnimCurveToolWidget::LoadFromAnimJson(const FFilePath& JsonName)
+bool SAnimCurveToolWidget::LoadFromAnimJson(const FString& JsonName)
 {
     FString FileContents;
-    if (!FFileHelper::LoadFileToString(FileContents, *JsonName.FilePath))
+    if (!FFileHelper::LoadFileToString(FileContents, *JsonName))
     {
         return false;
     }
