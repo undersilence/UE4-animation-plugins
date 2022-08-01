@@ -105,7 +105,9 @@ public:
     static bool MarkFootstepsFor1PAnimation(UAnimSequence* Seq, FString const& KeyBone = "LeftHand",
                                             bool bDebug = false);
 
-    static bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const FString& SavePath);
+    // SaveFlags 0b_____________0000__________0000
+    //              translation.xyzw rotation.xyzw
+    static bool SaveBonesCurves(UAnimSequence* AnimSequence, FString const& BoneName, const FString& SavePath, uint32 SaveFlags = 0xff);
 
     static bool LoadAnimSequencesByReference(const TArray<FString>& AnimSequencePaths,
                                              TArray<UAnimSequence*>& OutSequences);

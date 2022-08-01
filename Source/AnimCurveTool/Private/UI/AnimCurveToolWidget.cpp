@@ -377,8 +377,11 @@ FReply SAnimCurveToolWidget::OnSubmitExtractCurves()
     ProcessAnimSequencesFilter();
     for (auto Seq : SequenceSelection->AnimationSequences)
     {
+        uint32 SaveFlags = 0;
+        SaveFlags |= AnimCurveSetting->IsExtractPositionXYZ? 0xf0: 0x00;
+        SaveFlags |= AnimCurveSetting->IsExtractRotationXYZ? 0x0f: 0x00;
         if (!FAnimCurveUtils::SaveBonesCurves(Seq, AnimCurveSetting->TargetBoneName,
-                                              AnimCurveSetting->ExportDirectoryPath.Path))
+                                              AnimCurveSetting->ExportDirectoryPath.Path, SaveFlags))
         {
             UE_LOG(LogAnimCurveTool, Warning, TEXT("[%s->%s]: Error ocurrs when save bone curves!"), *Seq->GetName(),
                    *AnimCurveSetting->TargetBoneName);
@@ -462,7 +465,7 @@ FReply SAnimCurveToolWidget::OnSubmitLoadJson()
             LOCTEXT("ImportDialogTitle", "Import").ToString(),
             FEditorDirectories::Get().GetLastDirectory(ELastDirectory::GENERIC_IMPORT),
             TEXT(""),
-            "Curve Table JSON (*.json)|*.json",
+            "AnimSequence list JSON (*.json)|*.json",
             EFileDialogFlags::Multiple,
             OpenFilenames,
             FilterIndex // file type dependent
