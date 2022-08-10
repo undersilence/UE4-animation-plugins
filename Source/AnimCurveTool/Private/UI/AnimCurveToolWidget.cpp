@@ -1,5 +1,6 @@
 ﻿#include "AnimCurveToolWidget.h"
 
+#include "AnimationBlueprintLibrary.h"
 #include "DesktopPlatformModule.h"
 #include "EditorDirectories.h"
 #include "PropertyEditing.h"
@@ -21,64 +22,6 @@
 DEFINE_LOG_CATEGORY_STATIC(LogAnimCurveTool, Log, All);
 
 #define LOCTEXT_NAMESPACE "FAnimCurveToolModule"
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// UAnimCurveSettings | Anim Curve settings
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool UAnimCurveSettings::IsInitialized = false;
-UAnimCurveSettings* UAnimCurveSettings::DefaultSetting = nullptr;
-
-void UAnimCurveSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-}
-
-bool UFootstepSettings::IsInitialized = false;
-UFootstepSettings* UFootstepSettings::DefaultSetting = nullptr;
-
-void UFootstepSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-}
-
-bool UAnimSequenceSelection::IsInitialized = false;
-UAnimSequenceSelection* UAnimSequenceSelection::DefaultSetting = nullptr;
-
-void UAnimSequenceSelection::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-}
-
-bool UAnimJsonSettings::IsInitialized = false;
-UAnimJsonSettings* UAnimJsonSettings::DefaultSetting = nullptr;
-
-// TSharedRef<IDetailCustomization> FAnimRuleDetailCustom::MakeInstance()
-// {
-//     return MakeShareable(new FAnimRuleDetailCustom);
-// }
-//
-// void FAnimRuleDetailCustom::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
-// {
-//
-//     IDetailCategoryBuilder& aaa = DetailBuilder.EditCategory(FName("aaa"));
-//     aaa.AddCustomRow(FText::GetEmpty())
-//     .NameContent()
-//     [
-//         SNew(STextBlock)
-//         .Text(FText::FromString("sss"))
-//     ]
-//     .ValueContent()
-//     [
-//         SNew(SButton)
-//         .Text(FText::FromString("abc"))
-//     ];
-// }
-
-void UAnimJsonSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-}
 
 template <typename T>
 TSharedPtr<IDetailsView> SAnimCurveToolWidget::CreateSettingView(FString Name, T* SettingViewObject)
@@ -123,7 +66,8 @@ bool SAnimCurveToolWidget::IsPropertyVisible(const FPropertyAndParent& PropertyA
         "SequenceSelection",
         "CurveSetting",
         "FootstepSetting",
-        "JsonGeneration"
+        "FilterSetting",
+        "CheckSetting"
     };
 
     FString PropertyCategoryName = PropertyAndParent.Property.GetMetaData("Category");
@@ -139,7 +83,7 @@ bool SAnimCurveToolWidget::IsPropertyVisible(const FPropertyAndParent& PropertyA
 }
 
 #define REGISTER_ANIM_NAME_CHECK(Check_Type) \
-    CheckRegistryTable.Emplace(Check_Type, &FAnimCurveUtils::MatchAnimName<Check_Type>)
+    CheckRegistryTable.Emplace(Check_Type, &FAnimRuleFilter::MatchAnimName<Check_Type>)
 
 
 void SAnimCurveToolWidget::Setup()
@@ -155,6 +99,9 @@ void SAnimCurveToolWidget::Setup()
 
     JsonSetting = UAnimJsonSettings::Get();
     JsonSetting->m_ParentWidget = this;
+
+    CheckSetting = UAnimCheckSettings::Get();
+    CheckSetting->m_ParentWidget = this;
 
     REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Least_One);
     REGISTER_ANIM_NAME_CHECK(EAnimFilterType::Have_All);
@@ -172,6 +119,7 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
     FootstepSettingView = CreateSettingView<UFootstepSettings>(TEXT("Resources"), UFootstepSettings::Get());
     SequenceSelectionView = CreateSettingView<UAnimSequenceSelection>(TEXT("Resources"), UAnimSequenceSelection::Get());
     JsonSettingView = CreateSettingView<UAnimJsonSettings>(TEXT("Resources"), UAnimJsonSettings::Get());
+    CheckSettingView = CreateSettingView<UAnimCheckSettings>(TEXT("Resources"), UAnimCheckSettings::Get());
 
     SVerticalBox::FSlot& PropertyPannel = SVerticalBox::Slot().Padding(2.0f, 1.0f)
     [
@@ -217,6 +165,16 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
                     SNew(SHorizontalBox) + SHorizontalBox::Slot().VAlign(VAlign_Top)
                     [
                         JsonSettingView->AsShared()
+                    ]
+                ]
+
+                + SVerticalBox::Slot()
+                  .AutoHeight()
+                  .Padding(FEditorStyle::GetMargin("StandardDialog.ContentPadding"))
+                [
+                    SNew(SHorizontalBox) + SHorizontalBox::Slot().VAlign(VAlign_Top)
+                    [
+                        CheckSettingView->AsShared()
                     ]
                 ]
             ]
@@ -269,11 +227,9 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
           .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-						.HAlign(HAlign_Center)
-						.VAlign(VAlign_Center)
-						.Text(LOCTEXT("Camera_Root_Check", "Check Camera_Root"))
+						.Text(LOCTEXT("Camera_Animation", "Check Animation"))
 					// .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
-						.OnClicked(this, &SAnimCurveToolWidget::OnSubmitCheckCameraRoot)
+						.OnClicked(this, &SAnimCurveToolWidget::OnSubmitCheckAnimation)
         ]
 
     ];
@@ -290,8 +246,6 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
                                .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-             .HAlign(HAlign_Center)
-             .VAlign(VAlign_Center)
              .Text(LOCTEXT("Generate_Json", "Generate Json"))
          // .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
              .OnClicked(this, &SAnimCurveToolWidget::OnSubmitGenerateJson)
@@ -304,8 +258,6 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
           .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-             .HAlign(HAlign_Center)
-             .VAlign(VAlign_Center)
              .Text(LOCTEXT("Load_Json", "Load from Json"))
              .OnClicked(this, &SAnimCurveToolWidget::OnSubmitLoadJson)
         ]
@@ -317,8 +269,6 @@ TSharedRef<SWidget> SAnimCurveToolWidget::Content()
           .Padding(4, 0, 0, 0)
         [
             SNew(SButton)
-             .HAlign(HAlign_Center)
-             .VAlign(VAlign_Center)
              .Text(LOCTEXT("Open_Document", "Open Document"))
              .ButtonColorAndOpacity(FLinearColor(0.2f, 1.0f, 0.2f))
              .OnClicked(this, &SAnimCurveToolWidget::OnDocumentButtonClick)
@@ -378,8 +328,8 @@ FReply SAnimCurveToolWidget::OnSubmitExtractCurves()
     for (auto Seq : SequenceSelection->AnimationSequences)
     {
         uint32 SaveFlags = 0;
-        SaveFlags |= AnimCurveSetting->IsExtractPositionXYZ? 0xf0: 0x00;
-        SaveFlags |= AnimCurveSetting->IsExtractRotationXYZ? 0x0f: 0x00;
+        SaveFlags |= AnimCurveSetting->IsExtractPositionXYZ ? 0xf0 : 0x00;
+        SaveFlags |= AnimCurveSetting->IsExtractRotationXYZ ? 0x0f : 0x00;
         if (!FAnimCurveUtils::SaveBonesCurves(Seq, AnimCurveSetting->TargetBoneName,
                                               AnimCurveSetting->ExportDirectoryPath.Path, SaveFlags))
         {
@@ -394,19 +344,34 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
 {
     TArray<UAnimSequence*> AnimSequences;
     FAnimCurveUtils::GetAnimAssets(JsonSetting->SearchPath.Path, AnimSequences);
-
-    for (auto& Filter : JsonSetting->AnimRuleFilters)
+    
+    if(JsonSetting->bEnableNameConventionFilter)
     {
-        AnimSequences.RemoveAll(
-            [&](auto Seq) -> bool
-            {
-                auto IsRequired = CheckRegistryTable[Filter.FilterType](Filter.Keywords, Seq->GetName());
-                // if(!IsRequired)
-                // {
-                //     UE_LOG(LogAnimCurveTool, Log, TEXT("Remove %s, due to rule %s"), *Seq->GetName(), *Filter.Keywords[0]);
-                // }
-                return !IsRequired;
-            });
+        for (auto& Filter : JsonSetting->AnimRuleFilters)
+        {
+            AnimSequences.RemoveAll(
+                [&](auto Seq) -> bool
+                {
+                    auto IsRequired = CheckRegistryTable[Filter.FilterType](Filter.Keywords, Seq->GetName());
+                    // if(!IsRequired)
+                    // {
+                    //     UE_LOG(LogAnimCurveTool, Log, TEXT("Remove %s, due to rule %s"), *Seq->GetName(), *Filter.Keywords[0]);
+                    // }
+                    return !IsRequired;
+                });
+        }
+    }
+    
+    if(JsonSetting->bEnableVariableCurvesFilter)
+    {
+        for(auto& CurveName : JsonSetting->VariableCurvesNames)
+        {
+            AnimSequences.RemoveAll(
+                    [&](auto Seq) -> bool
+                    {
+                        return !UAnimationBlueprintLibrary::DoesCurveExist(Seq, *CurveName, ERawCurveTrackTypes::RCT_MAX);
+                    });
+        }
     }
 
     TArray<TSharedPtr<FJsonValue>> SequencesRefs;
@@ -444,7 +409,7 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
 
 FReply SAnimCurveToolWidget::OnDocumentButtonClick()
 {
-    FPlatformProcess::LaunchURL(TEXT("https://iwiki.woa.com/pages/viewpage.action?pageId=2006664229"), NULL, NULL);
+    FPlatformProcess::LaunchURL(TEXT("https://iwiki.woa.com/pages/viewpage.action?pageId=2006664229"), nullptr, nullptr);
     return FReply::Handled();
 }
 
@@ -495,7 +460,20 @@ FReply SAnimCurveToolWidget::OnSubmitLoadJson()
     return FReply::Handled();
 }
 
-FReply SAnimCurveToolWidget::OnSubmitCheckCameraRoot()
+FReply SAnimCurveToolWidget::OnSubmitCheckAnimation()
+{
+    if (CheckSetting->bCheckIfCameraRootAtOrigin)
+    {
+        CheckCameraRootAtOrigin();
+    }
+    if (CheckSetting->bCheckIfSingleFrameAnim)
+    {
+        CheckSingleFrameAnimation();
+    }
+    return FReply::Handled();
+}
+
+void SAnimCurveToolWidget::CheckCameraRootAtOrigin()
 {
     ProcessAnimSequencesFilter();
     SequenceSelection->ErrorSequences.Empty();
@@ -524,9 +502,21 @@ FReply SAnimCurveToolWidget::OnSubmitCheckCameraRoot()
             }
         }
     }
-    return FReply::Handled();
 }
 
+void SAnimCurveToolWidget::CheckSingleFrameAnimation()
+{
+    ProcessAnimSequencesFilter();
+    SequenceSelection->ErrorSequences.Empty();
+    for (auto Seq : SequenceSelection->AnimationSequences)
+    {
+        if (Seq->GetNumberOfFrames() == 1)
+        {
+            UE_LOG(LogAnimCurveTool, Warning, TEXT("[%s] only contains one frame!"), *Seq->GetName());
+            SequenceSelection->ErrorSequences.Push(Seq);
+        }
+    }
+}
 
 bool SAnimCurveToolWidget::LoadFromAnimJson(const FString& JsonName)
 {
@@ -569,3 +559,5 @@ bool SAnimCurveToolWidget::LoadFromAnimJson(const FString& JsonName)
 
     return FAnimCurveUtils::LoadAnimSequencesByReference(AnimSequencePaths, SequenceSelection->AnimationSequences);
 }
+
+#undef LOCTEXT_NAMESPACE

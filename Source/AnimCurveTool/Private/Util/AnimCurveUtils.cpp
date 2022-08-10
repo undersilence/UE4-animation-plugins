@@ -151,7 +151,7 @@ UCurveVector* FAnimCurveUtils::CreateCurveVectorAsset(const FString& PackagePath
     const auto Package = CreatePackage(nullptr, *PackageName);
     EObjectFlags Flags = RF_Public | RF_Standalone | RF_Transactional;
 
-    const auto NewObj =
+    const auto NewObj = 
         NewObject<UCurveVector>(Package, FName(*CurveName), Flags);
     if (NewObj)
     {
