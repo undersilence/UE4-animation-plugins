@@ -325,6 +325,7 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
     // }
 
     SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
+    Seq->MarkPackageDirty();
     if (bDebug)
     {
         SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosX_Curve"), *KeyBone), PosXCurve);

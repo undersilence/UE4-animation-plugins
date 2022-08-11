@@ -200,7 +200,7 @@ public:
     TArray<FAnimRuleFilter> AnimRuleFilters {
         {{EAnimFilterType::Least_One}, {"_1P_", "_1p_", "_IP_"}},
         {{EAnimFilterType::Least_One}, {"Crouch", "Walk", "Run", "Sprint"}},
-        {{EAnimFilterType::Not_Any}, {"Idle", "Offset", "Wounded", "Prone", "Dying", "Start", "End"}},
+        {{EAnimFilterType::Not_Any}, {"Idle", "Offset", "Wounded", "Prone", "Dying", "Start", "Stop"}},
         {{EAnimFilterType::Not_Start}, {"BS_"}}
     };
 
@@ -264,7 +264,7 @@ private:
 
 public:
     UPROPERTY(EditAnywhere, Category=FootstepSetting)
-    TArray<FString> TrackBoneNames = {"LeftHand", "RightHand"};
+    TArray<FString> TrackBoneNames = {"RightHand", "LeftHand"};
 
     UPROPERTY(EditAnywhere, Category=FootstepSetting)
     bool IsEnableDebug = false;
