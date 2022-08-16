@@ -264,7 +264,7 @@ private:
 
 public:
     UPROPERTY(EditAnywhere, Category=FootstepSetting)
-    TArray<FString> TrackBoneNames = {"RightHand", "LeftHand"};
+    TArray<FString> TrackBoneNames = {"LeftHand", "RightHand"};
 
     UPROPERTY(EditAnywhere, Category=FootstepSetting)
     bool IsEnableDebug = false;

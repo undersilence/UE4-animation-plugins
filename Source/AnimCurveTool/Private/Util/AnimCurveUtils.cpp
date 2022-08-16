@@ -204,18 +204,109 @@ bool FAnimCurveUtils::GetBoneKeysByNameHelper(
     return true;
 }
 
-bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
-    UAnimSequence* Seq, FString const& KeyBone /* = "LeftHand" */, bool bDebug /* = false */)
+float FAnimCurveUtils::CalcStdDevOfMarkers(TArray<FFootstepMarker> const & Markers, int32 TotalFrames)
 {
-    FFloatCurve FootstepsCurve, PosXCurve, PosZCurve, RotYCurve;
+    const float AverageStride = static_cast<float>(TotalFrames - 1) / Markers.Num();
+    float StdDev = 0.0f;
+    for(int i = 0; i < Markers.Num(); i++)
+    {
+        const int CurrPt = Markers[i].Frame;
+        const int NextPt = Markers[(i+1)%Markers.Num()].Frame;
+        const int Stride = (NextPt + TotalFrames - 1 - CurrPt)%(TotalFrames - 1);
+        StdDev += (Stride - AverageStride)*(Stride - AverageStride);
+    }
+    StdDev /= Markers.Num();
+    return StdDev /= Markers.Num();
+}
+
+bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
+    UAnimSequence* Seq, TArray<FString> KeyBones, bool bDebug /* = false */)
+{
+
+    // TArray<TArray<FFootstepMarker>> MarkersBuffer;
+    float MinPenalty = 1e9;
+    TArray<FFootstepMarker> BestMarkers;
+    const auto TotalFrames = Seq->GetNumberOfFrames();
+    FString BestKeyBone;
+    
+    for(auto const & KeyBone : KeyBones) {
+        float Penalty = 0;
+        TArray<FFootstepMarker> Markers;
+        CaptureFootstepMarksByBoneName(Seq, KeyBone, Markers, bDebug);
+        if(Markers.Num() == 0)
+        {
+            // no markers
+            continue;
+        }
+        
+        // Rule#0, Even numbers is best
+        Penalty += (Markers.Num() % 2) * 10000.0f;
+        
+        // Rule#1, stride uniformly
+        Penalty += CalcStdDevOfMarkers(Markers, TotalFrames);
+        UE_LOG(LogAnimCurveUtil, Log, TEXT("[%s->%s] Penalty: %f"), *Seq->GetName(), *KeyBone, Penalty);
+        
+        // Choose Best markers
+        if(Penalty < MinPenalty)
+        {
+            MinPenalty = Penalty;
+            BestKeyBone = KeyBone;
+            Swap(BestMarkers, Markers);
+        }
+    }
+
+    if(BestMarkers.Num() == 0)
+    {
+        // No Markers 
+        return false;
+    }
+    
+    if(BestMarkers.Num() > 1 && BestMarkers.Num() % 2 == 1)
+    {
+        // if still the number of steps is odd, remove one
+        TArray<FFootstepMarker> ModifiedMarkers;
+        MinPenalty = 1e9;
+        for(int i = 0; i < BestMarkers.Num(); ++i)
+        {
+            TArray<FFootstepMarker> TempMarkers = BestMarkers;
+            TempMarkers.RemoveAt(i);
+            float Penalty = CalcStdDevOfMarkers(TempMarkers, Seq->GetNumberOfFrames());
+            if(Penalty < MinPenalty)
+            {
+                MinPenalty = Penalty;
+                Swap(ModifiedMarkers, TempMarkers);
+            }
+        }
+        BestMarkers = ModifiedMarkers;
+    }
+    
+    // Normal cases;
+    FFloatCurve FootstepsCurve; 
+    auto CurrStep = -1; // LocalMinims[I].Orientation
+    for (auto const & Footstep : BestMarkers)
+    {
+        FootstepsCurve.UpdateOrAddKey(CurrStep, Seq->GetTimeAtFrame(Footstep.Frame));
+        FootstepsCurve.UpdateOrAddKey(-CurrStep, Seq->GetTimeAtFrame(Footstep.Frame) + 0.001);
+        CurrStep = -CurrStep;
+    }
+    SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
+    Seq->PostEditChange();
+    Seq->MarkPackageDirty();
+    return true;
+}
+
+void FAnimCurveUtils::CaptureFootstepMarksByBoneName(UAnimSequence* Seq, FString const& BoneName,
+                                                     TArray<FFootstepMarker>& FootstepMarkers, bool bDebug)
+{
+    FFloatCurve PosXCurve, PosZCurve, RotYCurve;
     // Get KeyBone translation and rotation keys
     TArray<FVector> PosKeys;
     TArray<FQuat> RotKeys;
-    if (!GetBoneKeysByNameHelper(Seq, KeyBone, PosKeys, RotKeys, true))
+    if (!GetBoneKeysByNameHelper(Seq, BoneName, PosKeys, RotKeys, true))
     {
         UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] BoneName (%s) not exist, or Curves can not be extracted"),
-               *Seq->GetName(), *KeyBone);
-        return false;
+               *Seq->GetName(), *BoneName);
+        return;
     }
     // Total Nums of the Key
     // Strategy: Capture the local Z minimal point in LeftHand
@@ -263,16 +354,11 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
 
     FVector PrevPos, NextPos, CurrPos;
     FVector PrevRot, NextRot, CurrRot;
-
-    TArray<FFootstepMarker> FootstepMarkers;
-    TArray<int32> MinimalKeys;
-    TArray<int32> Permutations;
-
+    constexpr float Eps = 1e-6;
     // Ignore end frame, cause frame_start == frame_end
-    PosCache.Pop();
-    RotCache.Pop();
-    float Eps = 1e-6;
+    PosCache.Pop(), RotCache.Pop();
     N = PosCache.Num(), M = RotCache.Num();
+    
     for (int i = 0; i < N; ++i)
     {
         PrevPos = PosCache[(i - 1 + N) % N];
@@ -281,92 +367,26 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
 
         if (CurrPos.Z + Eps <= PrevPos.Z && CurrPos.Z + Eps <= NextPos.Z)
         {
-            Permutations.Add(FootstepMarkers.Num());
-            MinimalKeys.Add(i);
             FootstepMarkers.Push(FFootstepMarker{CurrPos.Z, (PrevPos.X > CurrPos.X) * 2 - 1, i});
         }
     }
-
-    Permutations.Sort([&](int i, int j)
-    {
-        return FootstepMarkers[i].Value < FootstepMarkers[j].Value;
-    });
-
-    if (FootstepMarkers.Num() == 0)
-    {
-        UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s->%s] no footstep detected, skip."), *Seq->GetName(), *KeyBone);
-        return false;
-    }
-
-    if (FootstepMarkers.Num() & 1)
-    {
-        UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s->%s] Odd footsteps detected, remove highest."), *Seq->GetName(),
-               *KeyBone);
-        FootstepMarkers.RemoveAt(Permutations.Last());
-    }
-
-    // Normal cases;
-    // auto I = Permutations[0], J = Permutations[1];
-    auto CurrStep = -1; // LocalMinims[I].Orientation
-    for (auto& Footstep : FootstepMarkers)
-    {
-        FootstepsCurve.UpdateOrAddKey(CurrStep, Seq->GetTimeAtFrame(Footstep.Frame));
-        FootstepsCurve.UpdateOrAddKey(-CurrStep, Seq->GetTimeAtFrame(Footstep.Frame) + 0.001);
-        CurrStep = -CurrStep;
-    }
-
-    // FootstepsCurve.UpdateOrAddKey(-LocalMinims[J].Orientation, Seq->GetTimeAtFrame(MinimalKeys[J]) - 0.001);
-    // FootstepsCurve.UpdateOrAddKey(LocalMinims[J].Orientation, Seq->GetTimeAtFrame(MinimalKeys[J]));
-    //
-    // if (LocalMinims[I].Orientation == LocalMinims[J].Orientation)
-    // {
-    // 	UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s->%s] Footstep Marks on the same side, please check it manually."), *Seq->GetName(), *KeyBone);
-    // 	return false;
-    // }
-
-    SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
-    Seq->MarkPackageDirty();
+    
     if (bDebug)
     {
-        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosX_Curve"), *KeyBone), PosXCurve);
-        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosZ_Curve"), *KeyBone), PosZCurve);
-        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_RotY_Curve"), *KeyBone), RotYCurve);
+        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosX_Curve"), *BoneName), PosXCurve);
+        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosZ_Curve"), *BoneName), PosZCurve);
+        SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_RotY_Curve"), *BoneName), RotYCurve);
     }
 
-    if (FootstepMarkers.Num() > 2)
+    /*if (FootstepMarkers.Num() > 2)
     {
-        /* Check Potential Loops
-        bool bLoop = true;
-        for (int i = 0; i < LocalMinims.Num(); ++i)
-        {
-            auto I = Permutations[i], J = Permutations[(i + 2) % LocalMinims.Num()];
-            if (abs(LocalMinims[I].Value - LocalMinims[J].Value) > Eps)
-            {
-                bLoop = false;
-                break;
-            }
-        }
-        if (bLoop)
-        {
-            UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] Footstep Marks may contain potential loops."), *Seq->GetName());
-            return false;
-        }
-        else
-        {
-            UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s] mark footstep could fail when target Curves.Pos.Z (of %s) contains more than 2 local minimas"), *Seq->GetName(), *KeyBone);
-            return false;
-        }
-        */
         UE_LOG(LogAnimCurveUtil, Warning,
                TEXT("[%s->%s] mark footstep could fail when target Curves.Pos.Z contains more than 2 local minimas"),
-               *Seq->GetName(), *KeyBone);
-        return false;
+               *Seq->GetName(), *BoneName);
     }
     else if (FootstepMarkers.Num() == 1)
     {
         UE_LOG(LogAnimCurveUtil, Warning, TEXT("[%s->%s] has only one footstep mark, please check it manually."),
-               *Seq->GetName(), *KeyBone);
-        return false;
-    }
-    return true;
+               *Seq->GetName(), *BoneName);
+    }*/
 }

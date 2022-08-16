@@ -301,22 +301,11 @@ FReply SAnimCurveToolWidget::OnSubmitMarkFootsteps()
     for (auto Seq : SequenceSelection->AnimationSequences)
     {
         bool IsNoError = false;
-        for (auto& BoneName : FootstepSetting->TrackBoneNames)
-        {
-            if (!FAnimCurveUtils::MarkFootstepsFor1PAnimation(Seq, BoneName, FootstepSetting->IsEnableDebug))
-            {
-                // UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] may not be suitable for footstep recognition, skipped."), *Seq->GetName(), *BoneName);
-            }
-            else
-            {
-                // UE_LOG(LogAnimCurveTool, Log, TEXT("[%s->%s] attempt to mark footsteps success!"), *Seq->GetName(), *BoneName);
-                IsNoError = true;
-                break;
-            }
-        }
-        if (!IsNoError)
+        if (!FAnimCurveUtils::MarkFootstepsFor1PAnimation(Seq, FootstepSetting->TrackBoneNames,
+                                                          FootstepSetting->IsEnableDebug))
         {
             SequenceSelection->ErrorSequences.Add(Seq);
+            UE_LOG(LogAnimCurveTool, Log, TEXT("[%s] may not be suitable for footstep recognition."), *Seq->GetName());
         }
     }
     return FReply::Handled();
@@ -344,8 +333,8 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
 {
     TArray<UAnimSequence*> AnimSequences;
     FAnimCurveUtils::GetAnimAssets(JsonSetting->SearchPath.Path, AnimSequences);
-    
-    if(JsonSetting->bEnableNameConventionFilter)
+
+    if (JsonSetting->bEnableNameConventionFilter)
     {
         for (auto& Filter : JsonSetting->AnimRuleFilters)
         {
@@ -361,16 +350,16 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
                 });
         }
     }
-    
-    if(JsonSetting->bEnableVariableCurvesFilter)
+
+    if (JsonSetting->bEnableVariableCurvesFilter)
     {
-        for(auto& CurveName : JsonSetting->VariableCurvesNames)
+        for (auto& CurveName : JsonSetting->VariableCurvesNames)
         {
             AnimSequences.RemoveAll(
-                    [&](auto Seq) -> bool
-                    {
-                        return !UAnimationBlueprintLibrary::DoesCurveExist(Seq, *CurveName, ERawCurveTrackTypes::RCT_MAX);
-                    });
+                [&](auto Seq) -> bool
+                {
+                    return !UAnimationBlueprintLibrary::DoesCurveExist(Seq, *CurveName, ERawCurveTrackTypes::RCT_MAX);
+                });
         }
     }
 
@@ -409,7 +398,8 @@ FReply SAnimCurveToolWidget::OnSubmitGenerateJson()
 
 FReply SAnimCurveToolWidget::OnDocumentButtonClick()
 {
-    FPlatformProcess::LaunchURL(TEXT("https://iwiki.woa.com/pages/viewpage.action?pageId=2006664229"), nullptr, nullptr);
+    FPlatformProcess::LaunchURL(
+        TEXT("https://iwiki.woa.com/pages/viewpage.action?pageId=2006664229"), nullptr, nullptr);
     return FReply::Handled();
 }
 
