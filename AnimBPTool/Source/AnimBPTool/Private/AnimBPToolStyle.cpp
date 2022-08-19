@@ -46,7 +46,7 @@ TSharedRef< FSlateStyleSet > FAnimBPToolStyle::Create()
 	TSharedRef< FSlateStyleSet > Style = MakeShareable(new FSlateStyleSet("AnimBPToolStyle"));
 	Style->SetContentRoot(IPluginManager::Get().FindPlugin("AnimBPTool")->GetBaseDir() / TEXT("Resources"));
 
-	Style->Set("AnimBPTool.PluginAction", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), Icon40x40));
+	Style->Set("AnimBPTool.HidePins", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), Icon40x40));
 
 	return Style;
 }

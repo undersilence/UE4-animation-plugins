@@ -64,7 +64,7 @@ TSharedRef<FExtender> FAnimBPToolModule::GetAnimationBlueprintEditorToolbarExten
     const TSharedRef<FUICommandList> CommandList, TSharedRef<IAnimationBlueprintEditor> InAnimationBlueprintEditor)
 {
     TSharedRef<FExtender> Extender = MakeShareable(new FExtender);
-
+    CommandList->Append(PluginCommands.ToSharedRef());
     if (InAnimationBlueprintEditor->GetBlueprintObj() && InAnimationBlueprintEditor->GetBlueprintObj()->BlueprintType !=
         BPTYPE_Interface)
     {
@@ -72,7 +72,7 @@ TSharedRef<FExtender> FAnimBPToolModule::GetAnimationBlueprintEditorToolbarExten
         Extender->AddToolBarExtension(
             "Asset",
             EExtensionHook::After,
-            PluginCommands,
+            CommandList,
             FToolBarExtensionDelegate::CreateRaw(this, &FAnimBPToolModule::AddToolbarExtension));
     }
 
@@ -89,7 +89,8 @@ void FAnimBPToolModule::AddToolbarExtension(FToolBarBuilder& Builder)
             LOCTEXT("HideUnconnectedPins", "Hide Unconnected Pins"),
             LOCTEXT("HideUnconnectedPinsTooltip",
                     "Hide unconnected pins for K2Node_BreakStruct in blueprint"),
-            FSlateIcon(FEditorStyle::GetStyleSetName(), "GraphEditor.ToggleHideUnrelatedNodes"));
+            FSlateIcon("AnimBPToolStyle", "AnimBPTool.HidePins"));
+        
     }
     Builder.EndSection();
 }
@@ -98,24 +99,32 @@ void FAnimBPToolModule::HideUnconnectedPins() const
 {
     if(!AnimBPEditorPtr.IsValid()) return;
     const auto GraphPtr = AnimBPEditorPtr.Pin()->GetFocusedGraph();
+    GEditor->BeginTransaction(LOCTEXT("HideAllUnconnectedPins", "Hide All Unconnected Pins"));
+    GraphPtr->Modify();
     for (const auto Node : GraphPtr->Nodes)
     {
         if (Node && Node->IsA<UK2Node_BreakStruct>())
         {
             const auto Node_BreakStruct = Cast<UK2Node_BreakStruct>(Node);
+            bool bWasChanged = false;
             for (auto& PropertyPin : Node_BreakStruct->ShowPinForProperties)
             {
                 const auto NodePin = Node_BreakStruct->FindPin(
                     PropertyPin.PropertyName.ToString(), EGPD_Output);
                 if (NodePin && NodePin->LinkedTo.Num() <= 0)
                 {
+                    bWasChanged = true;
                     PropertyPin.bShowPin = false;
+                    NodePin->SetSavePinIfOrphaned(false);
                 }
             }
-            Node_BreakStruct->ReconstructNode();
-            Node_BreakStruct->Modify();
+            // Node_BreakStruct->Modify();
+            if(bWasChanged) 
+                Node_BreakStruct->ReconstructNode();
+            // Node_BreakStruct->Modify();
         }
     }
+    GEditor->EndTransaction();
     // auto SelectedNodes = AnimationBlueprintEditor->GetSelectedNodes();
     // for (auto Node : SelectedNodes)
     // {

@@ -33,7 +33,7 @@ public:
                                             bool bDebug = false);
 
     // Give bone name for capture, return possible marks.
-    static void CaptureFootstepMarksByBoneName(UAnimSequence* Seq, FString const& BoneNames,
+    static void CaptureLocalMinimaMarksByBoneName(UAnimSequence* Seq, FString const& BoneNames,
                                                TArray<FFootstepMarker>& Markers, bool bDebug = false);
  
     // SaveFlags 0b_____________0000__________0000

@@ -65,7 +65,7 @@ bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const
     if (!SaveFlags) return true;
 
     FVectorCurve PosCurve, RotCurve;
-    
+
     TArray<FVector> PosKeys;
     TArray<FQuat> RotKeys;
     if (!GetBoneKeysByNameHelper(AnimSequence, BoneName, PosKeys, RotKeys, true))
@@ -83,14 +83,14 @@ bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const
         PosCurve.FloatCurves[0].UpdateOrAddKey(Time, Translation.X);
         PosCurve.FloatCurves[1].UpdateOrAddKey(Time, Translation.Y);
         PosCurve.FloatCurves[2].UpdateOrAddKey(Time, Translation.Z);
-        
+
         RotCurve.FloatCurves[0].UpdateOrAddKey(Time, EulerAngle.X, true);
         RotCurve.FloatCurves[1].UpdateOrAddKey(Time, EulerAngle.Y, true);
         RotCurve.FloatCurves[2].UpdateOrAddKey(Time, EulerAngle.Z, true);
     }
     // MarkFootstepsFor1PAnimation(AnimSequence);
     // Save Packages
-    
+
     TArray<UPackage*> Packages;
     const auto AnimName = AnimSequence->GetName();
     const auto RawPackagePath = SaveDir / AnimName;
@@ -103,7 +103,7 @@ bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const
     }
     const auto CurveNamePrefix = AnimName + "_" + BoneName;
 
-    if(SaveFlags & 0xf0)
+    if (SaveFlags & 0xf0)
     {
         auto PosCurve_Asset = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Translation");
         if (SaveFlags & 0x80) PosCurve_Asset->FloatCurves[0] = PosCurve.FloatCurves[0];
@@ -112,7 +112,7 @@ bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const
         Packages.Add(PosCurve_Asset->GetOutermost());
     }
 
-    if(SaveFlags & 0x0f)
+    if (SaveFlags & 0x0f)
     {
         auto RotCurve_Asset = CreateCurveVectorAsset(PackagePath, CurveNamePrefix + "_Rotation");
         if (SaveFlags & 0x08) RotCurve_Asset->FloatCurves[0] = RotCurve.FloatCurves[0];
@@ -120,7 +120,7 @@ bool FAnimCurveUtils::SaveBonesCurves(UAnimSequence* AnimSequence, FString const
         if (SaveFlags & 0x02) RotCurve_Asset->FloatCurves[2] = RotCurve.FloatCurves[2];
         Packages.Add(RotCurve_Asset->GetOutermost());
     }
-    
+
     return UEditorLoadingAndSavingUtils::SavePackages(Packages, true);
 }
 
@@ -151,7 +151,7 @@ UCurveVector* FAnimCurveUtils::CreateCurveVectorAsset(const FString& PackagePath
     const auto Package = CreatePackage(nullptr, *PackageName);
     EObjectFlags Flags = RF_Public | RF_Standalone | RF_Transactional;
 
-    const auto NewObj = 
+    const auto NewObj =
         NewObject<UCurveVector>(Package, FName(*CurveName), Flags);
     if (NewObj)
     {
@@ -204,16 +204,16 @@ bool FAnimCurveUtils::GetBoneKeysByNameHelper(
     return true;
 }
 
-float FAnimCurveUtils::CalcStdDevOfMarkers(TArray<FFootstepMarker> const & Markers, int32 TotalFrames)
+float FAnimCurveUtils::CalcStdDevOfMarkers(TArray<FFootstepMarker> const& Markers, int32 TotalFrames)
 {
     const float AverageStride = static_cast<float>(TotalFrames - 1) / Markers.Num();
     float StdDev = 0.0f;
-    for(int i = 0; i < Markers.Num(); i++)
+    for (int i = 0; i < Markers.Num(); i++)
     {
         const int CurrPt = Markers[i].Frame;
-        const int NextPt = Markers[(i+1)%Markers.Num()].Frame;
-        const int Stride = (NextPt + TotalFrames - 1 - CurrPt)%(TotalFrames - 1);
-        StdDev += (Stride - AverageStride)*(Stride - AverageStride);
+        const int NextPt = Markers[(i + 1) % Markers.Num()].Frame;
+        const int Stride = (NextPt + TotalFrames - 1 - CurrPt) % (TotalFrames - 1);
+        StdDev += (Stride - AverageStride) * (Stride - AverageStride);
     }
     StdDev /= Markers.Num();
     return StdDev /= Markers.Num();
@@ -222,32 +222,32 @@ float FAnimCurveUtils::CalcStdDevOfMarkers(TArray<FFootstepMarker> const & Marke
 bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
     UAnimSequence* Seq, TArray<FString> KeyBones, bool bDebug /* = false */)
 {
-
     // TArray<TArray<FFootstepMarker>> MarkersBuffer;
     float MinPenalty = 1e9;
     TArray<FFootstepMarker> BestMarkers;
     const auto TotalFrames = Seq->GetNumberOfFrames();
     FString BestKeyBone;
-    
-    for(auto const & KeyBone : KeyBones) {
+
+    for (auto const& KeyBone : KeyBones)
+    {
         float Penalty = 0;
         TArray<FFootstepMarker> Markers;
-        CaptureFootstepMarksByBoneName(Seq, KeyBone, Markers, bDebug);
-        if(Markers.Num() == 0)
+        CaptureLocalMinimaMarksByBoneName(Seq, KeyBone, Markers, bDebug);
+        if (Markers.Num() == 0)
         {
             // no markers
             continue;
         }
-        
+
         // Rule#0, Even numbers is best
         Penalty += (Markers.Num() % 2) * 10000.0f;
-        
+
         // Rule#1, stride uniformly
         Penalty += CalcStdDevOfMarkers(Markers, TotalFrames);
         UE_LOG(LogAnimCurveUtil, Log, TEXT("[%s->%s] Penalty: %f"), *Seq->GetName(), *KeyBone, Penalty);
-        
+
         // Choose Best markers
-        if(Penalty < MinPenalty)
+        if (Penalty < MinPenalty)
         {
             MinPenalty = Penalty;
             BestKeyBone = KeyBone;
@@ -255,23 +255,23 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
         }
     }
 
-    if(BestMarkers.Num() == 0)
+    if (BestMarkers.Num() == 0)
     {
         // No Markers 
         return false;
     }
-    
-    if(BestMarkers.Num() > 1 && BestMarkers.Num() % 2 == 1)
+
+    if (BestMarkers.Num() > 1 && BestMarkers.Num() % 2 == 1)
     {
         // if still the number of steps is odd, remove one
         TArray<FFootstepMarker> ModifiedMarkers;
         MinPenalty = 1e9;
-        for(int i = 0; i < BestMarkers.Num(); ++i)
+        for (int i = 0; i < BestMarkers.Num(); ++i)
         {
             TArray<FFootstepMarker> TempMarkers = BestMarkers;
             TempMarkers.RemoveAt(i);
             float Penalty = CalcStdDevOfMarkers(TempMarkers, Seq->GetNumberOfFrames());
-            if(Penalty < MinPenalty)
+            if (Penalty < MinPenalty)
             {
                 MinPenalty = Penalty;
                 Swap(ModifiedMarkers, TempMarkers);
@@ -279,11 +279,23 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
         }
         BestMarkers = ModifiedMarkers;
     }
+
+    // Process True Footsteps
+    auto Frame0 = BestMarkers[0].Frame;
+    auto Frame1 = BestMarkers[1 % BestMarkers.Num()].Frame;
+    if (Frame1 <= Frame0) Frame1 += (TotalFrames - 1);
+    auto FrameMid = (Frame0 + (Frame1 - Frame0) / 2);
+    auto FootPt = FrameMid + (Frame1 - FrameMid) / 2;
+    auto Offset = FootPt - Frame1;
+    for (auto& Marker : BestMarkers)
+    {
+        Marker.Frame += Offset;
+    }
     
     // Normal cases;
-    FFloatCurve FootstepsCurve; 
+    FFloatCurve FootstepsCurve;
     auto CurrStep = -1; // LocalMinims[I].Orientation
-    for (auto const & Footstep : BestMarkers)
+    for (auto const& Footstep : BestMarkers)
     {
         FootstepsCurve.UpdateOrAddKey(CurrStep, Seq->GetTimeAtFrame(Footstep.Frame));
         FootstepsCurve.UpdateOrAddKey(-CurrStep, Seq->GetTimeAtFrame(Footstep.Frame) + 0.001);
@@ -295,8 +307,8 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
     return true;
 }
 
-void FAnimCurveUtils::CaptureFootstepMarksByBoneName(UAnimSequence* Seq, FString const& BoneName,
-                                                     TArray<FFootstepMarker>& FootstepMarkers, bool bDebug)
+void FAnimCurveUtils::CaptureLocalMinimaMarksByBoneName(UAnimSequence* Seq, FString const& BoneName,
+                                                        TArray<FFootstepMarker>& FootstepMarkers, bool bDebug)
 {
     FFloatCurve PosXCurve, PosZCurve, RotYCurve;
     // Get KeyBone translation and rotation keys
@@ -358,7 +370,7 @@ void FAnimCurveUtils::CaptureFootstepMarksByBoneName(UAnimSequence* Seq, FString
     // Ignore end frame, cause frame_start == frame_end
     PosCache.Pop(), RotCache.Pop();
     N = PosCache.Num(), M = RotCache.Num();
-    
+
     for (int i = 0; i < N; ++i)
     {
         PrevPos = PosCache[(i - 1 + N) % N];
@@ -370,7 +382,7 @@ void FAnimCurveUtils::CaptureFootstepMarksByBoneName(UAnimSequence* Seq, FString
             FootstepMarkers.Push(FFootstepMarker{CurrPos.Z, (PrevPos.X > CurrPos.X) * 2 - 1, i});
         }
     }
-    
+
     if (bDebug)
     {
         SetVariableCurveHelper(Seq, FString::Printf(TEXT("%s_PosX_Curve"), *BoneName), PosXCurve);

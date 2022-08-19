@@ -7,7 +7,7 @@
 void FAnimBPToolCommands::RegisterCommands()
 {
 	// UI_COMMAND(PluginAction, "AnimBPTool", "Execute AnimBPTool action", EUserInterfaceActionType::Button, FInputChord());
-	UI_COMMAND(HidePins, "AnimBPTool", "Hide All Unconnected Pins for K2Node_BreakStruct", EUserInterfaceActionType::Button, FInputChord())
+	UI_COMMAND(HidePins, "HideUnconnectedPins", "Hide All Unconnected Pins for K2Node_BreakStruct", EUserInterfaceActionType::Button, FInputChord())
 }
 
 #undef LOCTEXT_NAMESPACE
