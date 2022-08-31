@@ -30,7 +30,7 @@ public:
     
     // Give optional bone names for capture, return best matches.
     static bool MarkFootstepsFor1PAnimation(UAnimSequence* Seq, TArray<FString> KeyBones = {"LeftHand", "RightHand"},
-                                            bool bDebug = false);
+                                            bool bUseCurve = true, bool bDebug = false);
 
     // Give bone name for capture, return possible marks.
     static void CaptureLocalMinimaMarksByBoneName(UAnimSequence* Seq, FString const& BoneNames,
@@ -42,4 +42,6 @@ public:
 
     static bool LoadAnimSequencesByReference(const TArray<FString>& AnimSequencePaths,
                                              TArray<UAnimSequence*>& OutSequences);
+
+    static void CreateNewNotify(UAnimSequence* Seq, FName TrackName, FName NotifyName, float StartTime);
 };

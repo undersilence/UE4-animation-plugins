@@ -267,6 +267,9 @@ public:
     TArray<FString> TrackBoneNames = {"LeftHand", "RightHand"};
 
     UPROPERTY(EditAnywhere, Category=FootstepSetting)
+    bool bUseCurve = true;
+    
+    UPROPERTY(EditAnywhere, Category=FootstepSetting)
     bool IsEnableDebug = false;
 
     SWidget* m_ParentWidget;

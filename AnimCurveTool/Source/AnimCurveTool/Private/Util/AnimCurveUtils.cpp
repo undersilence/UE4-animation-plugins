@@ -5,6 +5,8 @@
 #include "EngineUtils.h"
 #include "FileHelpers.h"
 #include "PackageTools.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
+#include "Animation/AnimNotifies/AnimNotify_PlaySound.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 
@@ -220,7 +222,7 @@ float FAnimCurveUtils::CalcStdDevOfMarkers(TArray<FFootstepMarker> const& Marker
 }
 
 bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
-    UAnimSequence* Seq, TArray<FString> KeyBones, bool bDebug /* = false */)
+    UAnimSequence* Seq, TArray<FString> KeyBones, bool bUseCurve /* = true */, bool bDebug /* = false */)
 {
     // TArray<TArray<FFootstepMarker>> MarkersBuffer;
     float MinPenalty = 1e9;
@@ -285,27 +287,65 @@ bool FAnimCurveUtils::MarkFootstepsFor1PAnimation(
     auto Frame1 = BestMarkers[1 % BestMarkers.Num()].Frame;
     if (Frame1 <= Frame0) Frame1 += (TotalFrames - 1);
     auto FrameMid = (Frame0 + (Frame1 - Frame0) / 2);
-    auto FootPt = FrameMid + (Frame1 - FrameMid) / 2;
-    auto Offset = FootPt - Frame1;
+    auto Offset = (FrameMid - Frame1) / 2;
     for (auto& Marker : BestMarkers)
     {
         Marker.Frame += Offset;
+        if(Marker.Frame < 0) Marker.Frame += TotalFrames - 1;
     }
-    
+
+    // Seq->Modify();
     // Normal cases;
-    FFloatCurve FootstepsCurve;
-    auto CurrStep = -1; // LocalMinims[I].Orientation
-    for (auto const& Footstep : BestMarkers)
+    if(bUseCurve)
     {
-        FootstepsCurve.UpdateOrAddKey(CurrStep, Seq->GetTimeAtFrame(Footstep.Frame));
-        FootstepsCurve.UpdateOrAddKey(-CurrStep, Seq->GetTimeAtFrame(Footstep.Frame) + 0.001);
-        CurrStep = -CurrStep;
+        FFloatCurve FootstepsCurve;
+        auto CurrStep = -1; // LocalMinims[I].Orientation
+        for (auto const& Footstep : BestMarkers)
+        {
+            FootstepsCurve.UpdateOrAddKey(CurrStep, Seq->GetTimeAtFrame(Footstep.Frame));
+            FootstepsCurve.UpdateOrAddKey(-CurrStep, Seq->GetTimeAtFrame(Footstep.Frame) + 0.001);
+            CurrStep = -CurrStep;
+        }
+        SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
+    } else
+    {
+        FName FootstepTrackName(TEXT("Footstep_Track"));
+        FName FootstepNotifyName(TEXT("Footstep_Event"));
+        UAnimationBlueprintLibrary::RemoveAnimationNotifyTrack(Seq, FootstepTrackName);
+        UAnimationBlueprintLibrary::AddAnimationNotifyTrack(Seq, FootstepTrackName);
+        // UAnimNotify* Notify = DuplicateObject(GetDefault<UAnimNotify>(), Seq, TEXT("Footstep_Event"));
+        // FAnimNotifyEvent NotifyEvent;
+
+        // Create Footstep track
+        auto Skeleton = Seq->GetSkeleton();
+        Skeleton->AddNewAnimationNotify(FootstepNotifyName);
+        for(auto const& Footstep : BestMarkers)
+        {
+            CreateNewNotify(Seq, FootstepTrackName, FootstepNotifyName, Seq->GetTimeAtFrame(Footstep.Frame));
+        }
     }
-    SetVariableCurveHelper(Seq, "Footsteps_Curve", FootstepsCurve);
     Seq->PostEditChange();
     Seq->MarkPackageDirty();
     return true;
 }
+
+void FAnimCurveUtils::CreateNewNotify(UAnimSequence* Seq, FName TrackName, FName NotifyName, float StartTime)
+{
+    // Insert a new notify record and spawn the new notify object
+    int32 NewNotifyIndex = Seq->Notifies.Add(FAnimNotifyEvent());
+    FAnimNotifyEvent& NewEvent = Seq->Notifies[NewNotifyIndex];
+    NewEvent.NotifyName = NotifyName;
+    
+    NewEvent.Link(Seq, StartTime);
+    NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(Seq->CalculateOffsetForNotify(StartTime));
+    NewEvent.TrackIndex = UAnimationBlueprintLibrary::GetTrackIndexForAnimationNotifyTrackName(Seq, TrackName);
+    NewEvent.Notify = nullptr;
+    NewEvent.NotifyStateClass = nullptr;
+
+    Seq->PostEditChange();
+    Seq->MarkPackageDirty();
+}
+
 
 void FAnimCurveUtils::CaptureLocalMinimaMarksByBoneName(UAnimSequence* Seq, FString const& BoneName,
                                                         TArray<FFootstepMarker>& FootstepMarkers, bool bDebug)

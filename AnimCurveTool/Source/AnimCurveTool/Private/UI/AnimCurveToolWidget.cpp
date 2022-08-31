@@ -302,6 +302,7 @@ FReply SAnimCurveToolWidget::OnSubmitMarkFootsteps()
     {
         bool IsNoError = false;
         if (!FAnimCurveUtils::MarkFootstepsFor1PAnimation(Seq, FootstepSetting->TrackBoneNames,
+                                                          FootstepSetting->bUseCurve,
                                                           FootstepSetting->IsEnableDebug))
         {
             SequenceSelection->ErrorSequences.Add(Seq);
